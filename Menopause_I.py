@@ -274,11 +274,11 @@ class People:
             _survival_rate = _survival_rate * survival_rate_multiplier
 
         if Maturity_effect:
-            if (self.Mother is not None) & (self.Mother.Age < 32.7):
+            if (self.Mother is not None) and (self.Mother.Age < 32.7):
                 _survival_rate = 1 - (1 - _survival_rate) *  np.exp(0.004*(self.Mother.Age - 32.7)**2 - 0.25)
 
         if Maternal_depletion_effect:
-            if (self.Mother is not None) & (19 + (self.Mother.N_birth - 1) * interbirth_interval > 32.7):
+            if (self.Mother is not None) and (19 + (self.Mother.N_birth - 1) * interbirth_interval > 32.7):
                 _survival_rate = 1 - (1 - _survival_rate) *  np.exp(0.004*(19 + (self.Mother.N_birth -1) * interbirth_interval - 32.7)**2 - 0.25)
 
         return max(0,min(1,_survival_rate)) # ensure return 0<=_survival_rate<=1
