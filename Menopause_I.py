@@ -21,6 +21,9 @@ parser.add_argument('--sib-mortality', type=str2bool, required=True, help="Numbe
 parser.add_argument('--mat-mortality', type=str2bool, required=True, help="Survival of the mother influences the mortality")
 parser.add_argument('--lif-increase', type=str2bool, required=True, help="Gradually increase lifespan in evolution")
 parser.add_argument('--epi-inherit', type=str2bool, required=True, help="Inherit epigenetic effect")
+parser.add_argument('--maturity-effect', type=str2bool, required=True, help="Maturity effect on mortality")
+parser.add_argument('--maternal-depletion-effect', type=str2bool, required=True, help="Maternal depletion effect on mortality")
+parser.add_argument('--interbirth-interval', type=int, default=3, help="Interbirth interval")
 parser.add_argument('--k-s', type=float, default=1.5, help="k in survival_N_sib function")
 parser.add_argument('--x0-s', type=float, default=7, help="x0 in survival_N_sib function")
 parser.add_argument('--L-s', type=float, default=0.5, help="L in survival_N_sib function")
@@ -34,6 +37,9 @@ args = parser.parse_args()
 out_folder = args.out_dir
 Sibling_effect_mortality = args.sib_mortality
 Maternal_effect_mortality = args.mat_mortality
+Maturity_effect = args.maturity_effect
+Maternal_depletion_effect = args.maternal_depletion_effect
+interbirth_interval = args.interbirth_interval
 if_lifespan = args.lif_increase
 if_epi = args.epi_inherit
 k_s = args.k_s
@@ -232,6 +238,12 @@ class People:
     def get_sibling_effect_mortality(self):
         
         survival_rate_multiplier = np.mean([survival_N_sib(N_young_sib) for N_young_sib in self.N_young_sib_list])
+
+        if self.Age > 5:
+            survival_rate_multiplier = 1 - (1 - survival_rate_multiplier) * (1 - 1/14 * (self.Age - 5))
+
+        if self.Age >= 19:
+            survival_rate_multiplier = 1
         
         
         #survival_rate_multiplier = survival_N_sib(np.mean(self.N_young_sib_list))
@@ -260,7 +272,15 @@ class People:
         if Sibling_effect_mortality:
             survival_rate_multiplier = self.get_sibling_effect_mortality()
             _survival_rate = _survival_rate * survival_rate_multiplier
-        
+
+        if Maturity_effect:
+            if self.Mother.Age < 32.7:
+                _survival_rate = 1 - (1 - _survival_rate) *  np.exp(0.004*(self.Mother.Age - 32.7)**2 - 0.25)
+
+        if Maternal_depletion_effect:
+            if 19 + (self.Mother.N_birth - 1) * interbirth_interval > 32.7:
+                _survival_rate = 1 - (1 - _survival_rate) *  np.exp(0.004*(19 + (self.Mother.N_birth -1) * interbirth_interval - 32.7)**2 - 0.25)
+
         return max(0,min(1,_survival_rate)) # ensure return 0<=_survival_rate<=1
     
     
@@ -302,7 +322,7 @@ class People:
                 #if child_age_min < 3:
                 #    if not ((child_age_min == 2) and (get_random() < 0.5)):
                 #        _mating_willingness = 0
-                if child_age_min < 3:
+                if child_age_min < interbirth_interval:
                     _mating_willingness = 0
                     
         else:
