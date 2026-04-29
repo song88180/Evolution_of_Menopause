@@ -173,6 +173,7 @@ class People:
         self.sibling_list = []
         self.N_young_sib_list = []
         self.survival_rate = 1
+        self.mat_depletion_HR = 1
         self.mating_willingness = self.get_mating_willingness()
         self.marry_willingness = self.get_marry_willingness()
         #self.uid = self.get_uid(self)
@@ -196,28 +197,38 @@ class People:
         # mutant = nrand.choice(allele_list)
 
         if get_random() < 0.5:
-            if self.Paternal_allele.index == 0:
-                self.Paternal_allele = allele_list[1]
-            elif self.Paternal_allele.index == 35:
-                self.Paternal_allele = allele_list[34]
-            else:
-                if get_random() < 0.5:
-                    mut_idx = self.Paternal_allele.index + 1
-                else:
-                    mut_idx = self.Paternal_allele.index - 1
-                self.Paternal_allele = allele_list[mut_idx]
+            mut_idx = self.Paternal_allele.index + nrand.choice([-3, -2, -1, 1, 2, 3])
+            mut_idx = max(0, min(35, mut_idx))
+            self.Paternal_allele = allele_list[mut_idx]
 
         else:
-            if self.Maternal_allele.index == 0:
-                self.Maternal_allele = allele_list[1]
-            elif self.Maternal_allele.index == 35:
-                self.Maternal_allele = allele_list[34]
-            else:
-                if get_random() < 0.5:
-                    mut_idx = self.Maternal_allele.index + 1
-                else:
-                    mut_idx = self.Maternal_allele.index - 1
-                self.Maternal_allele = allele_list[mut_idx]
+            mut_idx = self.Maternal_allele.index + nrand.choice([-3, -2, -1, 1, 2, 3])
+            mut_idx = max(0, min(35, mut_idx))
+            self.Maternal_allele = allele_list[mut_idx]
+
+        #if get_random() < 0.5:
+        #    if self.Paternal_allele.index == 0:
+        #        self.Paternal_allele = allele_list[1]
+        #    elif self.Paternal_allele.index == 35:
+        #        self.Paternal_allele = allele_list[34]
+        #    else:
+        #        if get_random() < 0.5:
+        #            mut_idx = self.Paternal_allele.index + 1
+        #        else:
+        #            mut_idx = self.Paternal_allele.index - 1
+        #        self.Paternal_allele = allele_list[mut_idx]
+
+        #else:
+        #    if self.Maternal_allele.index == 0:
+        #        self.Maternal_allele = allele_list[1]
+        #    elif self.Maternal_allele.index == 35:
+        #        self.Maternal_allele = allele_list[34]
+        #    else:
+        #        if get_random() < 0.5:
+        #            mut_idx = self.Maternal_allele.index + 1
+        #        else:
+        #            mut_idx = self.Maternal_allele.index - 1
+        #        self.Maternal_allele = allele_list[mut_idx]
             
         self.Menopause_age = 70 + np.mean([self.Paternal_allele.effect, self.Maternal_allele.effect])
         
@@ -277,9 +288,8 @@ class People:
             if (self.Mother is not None) and (self.Mother.Age < 32.7):
                 _survival_rate = 1 - (1 - _survival_rate) *  np.exp(0.004*(self.Mother.Age - 32.7)**2 - 0.25)
 
-        if Maternal_depletion_effect:
-            if (self.Mother is not None) and (19 + (self.Mother.N_birth - 1) * interbirth_interval > 32.7):
-                _survival_rate = 1 - (1 - _survival_rate) *  np.exp(0.004*(19 + (self.Mother.N_birth -1) * interbirth_interval - 32.7)**2 - 0.25)
+        if Maternal_depletion_effect and (self.Age <= 5):
+            _survival_rate = 1 - (1 - _survival_rate) * self.mat_depletion_HR
 
         return max(0,min(1,_survival_rate)) # ensure return 0<=_survival_rate<=1
     
@@ -348,7 +358,7 @@ class Population:
         self.update()
         self.N_people_died = 0
         self.if_marriage = if_marriage
-        self.mutation_rate = 1/5000
+        self.mutation_rate = 1/500  # 1/5000
         #self.allele_dict = init_allele_dict()
         
     def Add_people(self, people):
@@ -407,6 +417,12 @@ class Population:
         offspring = People(sex,Paternal_allele,Maternal_allele,
                            gen_of_birth=self.Current_generation,age=0,
                            Mother=Female,Father=Male)
+
+
+        if 19 + (Female.N_birth - 1) * interbirth_interval > 32.7:
+            offspring.mat_depletion_HR = np.exp(0.004*(19 + (Female.N_birth -1) * interbirth_interval - 32.7)**2 - 0.25)
+        else:
+            offspring.mat_depletion_HR = np.exp(-0.25)
             
         for sibling in Female.offspring_list: # Only account for maternal siblings
             if sex == 0:
@@ -448,8 +464,8 @@ class Population:
             people.survival_rate = people.get_survival_rate()
         
         # If there are too many individuals, keep ~2000 of them.
-        if self.N_male + self.N_female > 20000:
-            self.pop_survival_rate = 10000/(self.N_male + self.N_female)
+        if self.N_male + self.N_female > 10000:
+            self.pop_survival_rate = 5000/(self.N_male + self.N_female)
         else:
             self.pop_survival_rate = 1
         
@@ -575,6 +591,10 @@ N_years = 150000
 
 for year in range(N_years + 1):
     print(f'{year}   ',end='\r')
+
+    if year % 10 == 0:
+        menopause_age_mean = Pop.get_mean_Menopause_age()
+        print(menopause_age_mean)
 
     if if_lifespan:
         max_age = np.round((year / N_years) * (end_age - start_age) + start_age).astype(int)
