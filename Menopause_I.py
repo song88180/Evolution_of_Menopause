@@ -284,8 +284,7 @@ class People:
         
         if Sibling_effect_mortality:
             survival_rate_multiplier = self.get_sibling_effect_mortality()
-
-        _survival_rate = _survival_rate * survival_rate_multiplier
+            _survival_rate = _survival_rate * survival_rate_multiplier
 
         hazard = 1
 
