@@ -29,6 +29,9 @@ parser.add_argument('--x0-s', type=float, default=7, help="x0 in survival_N_sib 
 parser.add_argument('--L-s', type=float, default=0.5, help="L in survival_N_sib function")
 parser.add_argument('--epi-h', type=float, default=0.05, help="L in survival_N_sib function")
 parser.add_argument('--max-age', type=int, default=70, help="maximum lifespan")
+parser.add_argument('--U-curve-left-quadratic-term', type=float, default=0.004, help="Quadratic term in U-curve")
+parser.add_argument('--U-curve-right-quadratic-term', type=float, default=0.004, help="Quadratic term in U-curve")
+parser.add_argument('--U-curve-vertex-x', type=float, default=32.7, help="Vertex x in U-curve")
 #parser.add_argument('--mat-death-effect', type=float, default=0.8, help="maternal death effect. Multiplier of surrvival rate")
 parser.add_argument('--idx', type=int, required=True)
 
@@ -47,6 +50,9 @@ x0_s = args.x0_s
 L_s = args.L_s
 epi_h = args.epi_h
 max_age = args.max_age
+U_curve_left_quadratic_term = args.U_curve_left_quadratic_term
+U_curve_right_quadratic_term = args.U_curve_right_quadratic_term
+U_curve_vertex_x = args.U_curve_vertex_x
 #maternal_death_effect = args.mat_death_effect
 run_idx = args.idx
 
@@ -247,15 +253,15 @@ class People:
         self.N_young_sib_list.append(N_young_sib)
     
     def get_sibling_effect_mortality(self):
-        
-        survival_rate_multiplier = np.mean([survival_N_sib(N_young_sib) for N_young_sib in self.N_young_sib_list])
-
-        if self.Age > 5:
-            survival_rate_multiplier = 1 - (1 - survival_rate_multiplier) * (1 - 1/10 * (self.Age - 5))
 
         if self.Age >= 15:
             survival_rate_multiplier = 1
-        
+
+        else:
+            survival_rate_multiplier = np.mean([survival_N_sib(N_young_sib) for N_young_sib in self.N_young_sib_list])
+
+            if self.Age > 5:
+                survival_rate_multiplier = 1 - (1 - survival_rate_multiplier) * (1 - 1/10 * (self.Age - 5))
         
         #survival_rate_multiplier = survival_N_sib(np.mean(self.N_young_sib_list))
         
@@ -271,25 +277,37 @@ class People:
         else:
             primary_mortality = Primary_mortality_with_age_male[self.Age]
         
-        _survival_rate = (1 - primary_mortality)
-        
-        if Maternal_effect_mortality:
-            if (self.Mother is None) and (self.Age <= 10):
-                _survival_rate = 1 - (1 - _survival_rate) * 10
+        _survival_rate = (1 - primary_mortality)        
 
         if if_epi:
             _survival_rate = _survival_rate * self.epi_survival_rate
         
         if Sibling_effect_mortality:
             survival_rate_multiplier = self.get_sibling_effect_mortality()
-            _survival_rate = _survival_rate * survival_rate_multiplier
 
-        if Maturity_effect:
-            if (self.Mother is not None) and (self.Mother.Age < 32.7):
-                _survival_rate = 1 - (1 - _survival_rate) *  np.exp(0.004*(self.Mother.Age - 32.7)**2)
+        _survival_rate = _survival_rate * survival_rate_multiplier
 
-        if Maternal_depletion_effect and (self.Age <= 5):
-            _survival_rate = 1 - (1 - _survival_rate) * self.mat_depletion_HR
+        hazard = 1
+
+        if Maternal_effect_mortality:
+            if (self.Mother is None) and (self.Age <= 10):
+                hazard = hazard * 10
+
+        if self.Age >= 15:
+            hazard = hazard * 1
+
+        else:
+            if Maturity_effect:
+                if (self.Mother is not None) and (self.Mother.Age < U_curve_vertex_x):
+                    hazard = hazard * np.exp(U_curve_left_quadratic_term*(self.Mother.Age - U_curve_vertex_x)**2)
+
+            if Maternal_depletion_effect:
+                hazard = hazard * self.mat_depletion_HR
+
+            if self.Age > 5:
+                hazard = hazard + (self.Age - 5) * (1 - hazard) / 10
+
+        _survival_rate = 1 - (1 - _survival_rate) * hazard
 
         return max(0,min(1,_survival_rate)) # ensure return 0<=_survival_rate<=1
     
@@ -419,8 +437,8 @@ class Population:
                            Mother=Female,Father=Male)
 
 
-        if Female.Age > 32.7:
-            offspring.mat_depletion_HR = np.exp(0.004*(Female.Age - 32.7)**2)
+        if Female.Age > U_curve_vertex_x:
+            offspring.mat_depletion_HR = np.exp(U_curve_right_quadratic_term*(Female.Age - U_curve_vertex_x)**2)
         else:
             offspring.mat_depletion_HR = 1
             
