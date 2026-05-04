@@ -150,8 +150,8 @@ default_allele = allele_list[30]
 class People:
     destructed_people = 0
     created_people = 0
-    Male_age_cutoff = 25
-    Female_age_cutoff = 19
+    Male_age_cutoff = 15
+    Female_age_cutoff = 15
     def __init__(self,sex,Paternal_allele,Maternal_allele,gen_of_birth,age=0,
                  N_sons=0,N_daughters=0,N_brothers=0,N_sisters=0,Mother=None,Father=None):
         self.Gen_of_birth = gen_of_birth
@@ -251,9 +251,9 @@ class People:
         survival_rate_multiplier = np.mean([survival_N_sib(N_young_sib) for N_young_sib in self.N_young_sib_list])
 
         if self.Age > 5:
-            survival_rate_multiplier = 1 - (1 - survival_rate_multiplier) * (1 - 1/14 * (self.Age - 5))
+            survival_rate_multiplier = 1 - (1 - survival_rate_multiplier) * (1 - 1/10 * (self.Age - 5))
 
-        if self.Age >= 19:
+        if self.Age >= 15:
             survival_rate_multiplier = 1
         
         
@@ -286,7 +286,7 @@ class People:
 
         if Maturity_effect:
             if (self.Mother is not None) and (self.Mother.Age < 32.7):
-                _survival_rate = 1 - (1 - _survival_rate) *  np.exp(0.004*(self.Mother.Age - 32.7)**2 - 0.25)
+                _survival_rate = 1 - (1 - _survival_rate) *  np.exp(0.004*(self.Mother.Age - 32.7)**2)
 
         if Maternal_depletion_effect and (self.Age <= 5):
             _survival_rate = 1 - (1 - _survival_rate) * self.mat_depletion_HR
@@ -419,10 +419,10 @@ class Population:
                            Mother=Female,Father=Male)
 
 
-        if 19 + (Female.N_birth - 1) * interbirth_interval > 32.7:
-            offspring.mat_depletion_HR = np.exp(0.004*(19 + (Female.N_birth -1) * interbirth_interval - 32.7)**2 - 0.25)
+        if Female.Age > 32.7:
+            offspring.mat_depletion_HR = np.exp(0.004*(Female.Age - 32.7)**2)
         else:
-            offspring.mat_depletion_HR = np.exp(-0.25)
+            offspring.mat_depletion_HR = 1
             
         for sibling in Female.offspring_list: # Only account for maternal siblings
             if sex == 0:
@@ -587,12 +587,12 @@ Menopause_age_list = []
 
 start_age = 40
 end_age = 70
-N_years = 150000
+N_years = 50000
 
 for year in range(N_years + 1):
     print(f'{year}   ',end='\r')
 
-    if year % 10 == 0:
+    if year % 50 == 0:
         menopause_age_mean = Pop.get_mean_Menopause_age()
         print(menopause_age_mean)
 
