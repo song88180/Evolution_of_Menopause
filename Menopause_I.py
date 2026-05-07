@@ -27,7 +27,7 @@ parser.add_argument('--interbirth-interval', type=int, default=3, help="Interbir
 parser.add_argument('--k-s', type=float, default=1.5, help="k in survival_N_sib function")
 parser.add_argument('--x0-s', type=float, default=7, help="x0 in survival_N_sib function")
 parser.add_argument('--L-s', type=float, default=0.5, help="L in survival_N_sib function")
-parser.add_argument('--epi-h', type=float, default=0.05, help="L in survival_N_sib function")
+parser.add_argument('--epi-h', type=float, default=0.05, help="heritability of the epigenetic effect")
 parser.add_argument('--max-age', type=int, default=70, help="maximum lifespan")
 parser.add_argument('--U-curve-left-quadratic-term', type=float, default=0.004, help="Quadratic term in U-curve")
 parser.add_argument('--U-curve-right-quadratic-term', type=float, default=0.004, help="Quadratic term in U-curve")
@@ -188,7 +188,7 @@ class People:
 
         if if_epi:
             if self.Mother is not None:
-                survival_rate_sib_eff = self.Mother.get_sibling_effect_mortality()
+                survival_rate_sib_eff = np.mean([survival_N_sib(N_young_sib) for N_young_sib in self.Mother.N_young_sib_list])
                 self.epi_survival_rate = 1 - (1 - survival_rate_sib_eff) * epi_h
             else:
                 self.epi_survival_rate = 1
@@ -260,6 +260,9 @@ class People:
         else:
             survival_rate_multiplier = np.mean([survival_N_sib(N_young_sib) for N_young_sib in self.N_young_sib_list])
 
+            if if_epi:
+                survival_rate_multiplier = survival_rate_multiplier * self.epi_survival_rate
+
             if self.Age > 5:
                 survival_rate_multiplier = 1 - (1 - survival_rate_multiplier) * (1 - 1/10 * (self.Age - 5))
         
@@ -277,10 +280,7 @@ class People:
         else:
             primary_mortality = Primary_mortality_with_age_male[self.Age]
         
-        _survival_rate = (1 - primary_mortality)        
-
-        if if_epi:
-            _survival_rate = _survival_rate * self.epi_survival_rate
+        _survival_rate = (1 - primary_mortality)
         
         if Sibling_effect_mortality:
             survival_rate_multiplier = self.get_sibling_effect_mortality()
@@ -293,7 +293,7 @@ class People:
                 hazard = hazard * 10
 
         if self.Age >= 15:
-            hazard = hazard * 1
+            hazard = 1
 
         else:
             if Maturity_effect:
