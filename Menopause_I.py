@@ -18,7 +18,7 @@ def str2bool(v):
 parser = argparse.ArgumentParser(description="Read simulation parameters")
 parser.add_argument('--out-dir', type=str, required=True, help="Output directory")
 parser.add_argument('--sib-mortality', type=str2bool, required=True, help="Number of siblings influences the mortality")
-parser.add_argument('--mat-mortality', type=str2bool, required=True, help="Survival of the mother influences the mortality")
+parser.add_argument('--mat-mortality', type=str2bool, required=False, help="Survival of the mother influences the mortality")
 parser.add_argument('--lif-increase', type=str2bool, required=True, help="Gradually increase lifespan in evolution")
 parser.add_argument('--epi-inherit', type=str2bool, required=True, help="Inherit epigenetic effect")
 parser.add_argument('--maturity-effect', type=str2bool, required=True, help="Maturity effect on mortality")
@@ -254,17 +254,22 @@ class People:
     
     def get_sibling_effect_mortality(self):
 
-        if self.Age >= 15:
+        if len(self.N_young_sib_list) > 0:
+            survival_rate_multiplier = np.mean([survival_N_sib(N_young_sib) for N_young_sib in self.N_young_sib_list])
+        else:
             survival_rate_multiplier = 1
 
+        if if_epi:
+            survival_rate_multiplier = survival_rate_multiplier * self.epi_survival_rate
+
+        if self.Age <= 5:
+            w = 1.0
+        elif self.Age >= 15:
+            w = 0.1
         else:
-            survival_rate_multiplier = np.mean([survival_N_sib(N_young_sib) for N_young_sib in self.N_young_sib_list])
+            w = 1.0 - 0.9 * (self.Age - 5) / 10.0
 
-            if if_epi:
-                survival_rate_multiplier = survival_rate_multiplier * self.epi_survival_rate
-
-            if self.Age > 5:
-                survival_rate_multiplier = 1 - (1 - survival_rate_multiplier) * (1 - 1/10 * (self.Age - 5))
+        survival_rate_multiplier = 1 - (1 - survival_rate_multiplier) * w
         
         #survival_rate_multiplier = survival_N_sib(np.mean(self.N_young_sib_list))
         
@@ -292,19 +297,21 @@ class People:
             if (self.Mother is None) and (self.Age <= 10):
                 hazard = hazard * 10
 
-        if self.Age >= 15:
-            hazard = 1
+        if Maturity_effect:
+            if (self.Mother is not None) and (self.Mother.Age < U_curve_vertex_x):
+                hazard = hazard * np.exp(U_curve_left_quadratic_term*(self.Mother.Age - U_curve_vertex_x)**2)
 
+        if Maternal_depletion_effect:
+            hazard = hazard * self.mat_depletion_HR
+
+        if self.Age <= 5:
+            w = 1.0
+        elif self.Age >= 15:
+            w = 0.1
         else:
-            if Maturity_effect:
-                if (self.Mother is not None) and (self.Mother.Age < U_curve_vertex_x):
-                    hazard = hazard * np.exp(U_curve_left_quadratic_term*(self.Mother.Age - U_curve_vertex_x)**2)
+            w = 1.0 - 0.9 * (self.Age - 5) / 10.0
 
-            if Maternal_depletion_effect:
-                hazard = hazard * self.mat_depletion_HR
-
-            if self.Age > 5:
-                hazard = hazard + (self.Age - 5) * (1 - hazard) / 10
+        hazard = 1 + w * (hazard - 1)
 
         _survival_rate = 1 - (1 - _survival_rate) * hazard
 
@@ -673,5 +680,4 @@ else:
 
 with open(f'{out_folder}/MPSim_result_{Sibling_effect_mortality}{Maternal_effect_mortality}_{run_idx}.txt', 'w') as f:
     f.write(f'{Sibling_effect_mortality}\t{Maternal_effect_mortality}\t{k_s}\t{x0_s}\t{L_s}\t{max_age}\t' + result_str + '\n')
-
 
