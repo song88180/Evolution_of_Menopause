@@ -203,12 +203,12 @@ class People:
         # mutant = nrand.choice(allele_list)
 
         if get_random() < 0.5:
-            mut_idx = self.Paternal_allele.index + nrand.choice([-3, -2, -1, 1, 2, 3])
+            mut_idx = self.Paternal_allele.index + nrand.choice([-1, 1])
             mut_idx = max(0, min(35, mut_idx))
             self.Paternal_allele = allele_list[mut_idx]
 
         else:
-            mut_idx = self.Maternal_allele.index + nrand.choice([-3, -2, -1, 1, 2, 3])
+            mut_idx = self.Maternal_allele.index + nrand.choice([-1, 1])
             mut_idx = max(0, min(35, mut_idx))
             self.Maternal_allele = allele_list[mut_idx]
 
