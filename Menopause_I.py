@@ -179,14 +179,14 @@ class People:
         self.marry_willingness = self.get_marry_willingness()
         
     def mutate(self):
-        # Mutate one inherited allele by one adjacent allele state.
+        # Mutate one inherited allele by a step of -2, -1, 1, or 2 allele states.
         if get_random() < 0.5:
-            mut_idx = self.Paternal_allele.index + nrand.choice([-1, 1])
+            mut_idx = self.Paternal_allele.index + nrand.choice([-2, -1, 1, 2])
             mut_idx = max(0, min(35, mut_idx))
             self.Paternal_allele = allele_list[mut_idx]
 
         else:
-            mut_idx = self.Maternal_allele.index + nrand.choice([-1, 1])
+            mut_idx = self.Maternal_allele.index + nrand.choice([-2, -1, 1, 2])
             mut_idx = max(0, min(35, mut_idx))
             self.Maternal_allele = allele_list[mut_idx]
             
