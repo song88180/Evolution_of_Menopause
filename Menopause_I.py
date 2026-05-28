@@ -5,6 +5,7 @@ import yaml
 import scipy.stats
 import argparse
 
+
 def str2bool(v):
     if isinstance(v, bool):
         return int(v)
@@ -32,7 +33,6 @@ parser.add_argument('--max-age', type=int, default=70, help="maximum lifespan")
 parser.add_argument('--U-curve-left-quadratic-term', type=float, default=0.004, help="Quadratic term in U-curve")
 parser.add_argument('--U-curve-right-quadratic-term', type=float, default=0.004, help="Quadratic term in U-curve")
 parser.add_argument('--U-curve-vertex-x', type=float, default=32.7, help="Vertex x in U-curve")
-#parser.add_argument('--mat-death-effect', type=float, default=0.8, help="maternal death effect. Multiplier of surrvival rate")
 parser.add_argument('--idx', type=int, required=True)
 
 args = parser.parse_args()
@@ -53,22 +53,21 @@ max_age = args.max_age
 U_curve_left_quadratic_term = args.U_curve_left_quadratic_term
 U_curve_right_quadratic_term = args.U_curve_right_quadratic_term
 U_curve_vertex_x = args.U_curve_vertex_x
-#maternal_death_effect = args.mat_death_effect
 run_idx = args.idx
 
 
 with open("options.yml",'r') as f:
     argv = yaml.load(f,Loader=yaml.FullLoader)
+
+# Baseline age schedules come from options.yml; mortality is generated below.
 Primary_reproduction_rate_with_age_female = argv['Primary_reproduction_rate_with_age_female']
 Primary_reproduction_rate_with_age_male = argv['Primary_reproduction_rate_with_age_male']
 Primary_marriage_rate_with_age_female = argv['Primary_marriage_rate_with_age_female']
 Primary_marriage_rate_with_age_male = argv['Primary_marriage_rate_with_age_male']
-#Primary_mortality_with_age_female = argv['Primary_mortality_with_age_female']
-#Primary_mortality_with_age_male = argv['Primary_mortality_with_age_male']
+
 
 def get_mortality_curve(max_age=70):
-    
-    fold_change = (70 - 11) / (max_age - 11)
+    # Infant and childhood mortality decline, then adult mortality rises exponentially.
     x = np.linspace(0,71,72).astype(int)
     
     A = 0.07
@@ -84,16 +83,9 @@ def get_mortality_curve(max_age=70):
     y[max_age+1:] = 1
     return x, y
 
-#def survival_N_sib(N_sib):
-#    global k_s
-#    global x0_s
-#    global L_s
-#    #k = 1.5
-#    #x0 = 7
-#    y = -L_s / (1 + np.exp(k_s * (x0_s - N_sib))) + 1
-#    return y
 
 def survival_N_sib(N_sib):
+    # More young siblings reduce survival through a saturating response.
     global k_s
     global x0_s
     global L_s
@@ -105,35 +97,23 @@ def survival_N_sib(N_sib):
         y = 0
     return y
 
-#def survival_N_sib(N_sib):
-#    global k_s
-#    global x0_s
-#    global L_s
-#    #k = 1.5
-#    #x0 = 7
-#    y = -L_s / (1 + np.exp(k_s * (x0_s - N_sib))) + 1
-#    return y
-
-#def survival_N_sib(N_sib):
-#    global k_s
-#    y = 1 - k_s * N_sib
-#    return y
 
 def marriage_N_sib(N_sib):
     global k_m
     global x0_m
     global L_m
-    #k = 1
-    #x0 = 5.5
     y = -L_m / (1 + np.exp(k_m * (x0_m - N_sib))) + 1
     return y
 
+
+# Pre-generate random values to reduce overhead in the long simulation loop.
 random_list=nrand.random(size=10000000).tolist()
 def get_random():
     global random_list
     if len(random_list) == 0:
         random_list=nrand.random(size=10000000).tolist()
     return random_list.pop()
+
 
 class Allele:
     N=0
@@ -148,6 +128,7 @@ Primary_mortality_with_age_male = Primary_mortality_with_age_female
 
 allele_list = []
 for i in range(36):
+    # Higher allele indices lower menopause age by one year per effect unit.
     effect = -i
     allele_list.append(Allele(effect=effect))
 
@@ -162,7 +143,7 @@ class People:
                  N_sons=0,N_daughters=0,N_brothers=0,N_sisters=0,Mother=None,Father=None):
         self.Gen_of_birth = gen_of_birth
         self.Age = age
-        self.Sex = sex #0-female, 1-male
+        self.Sex = sex
         self.Paternal_allele = Paternal_allele
         self.Maternal_allele = Maternal_allele
         self.Resource = 1
@@ -182,7 +163,6 @@ class People:
         self.mat_depletion_HR = 1
         self.mating_willingness = self.get_mating_willingness()
         self.marry_willingness = self.get_marry_willingness()
-        #self.uid = self.get_uid(self)
         People.created_people += 1
         self.epi_survival_rate = 1
 
@@ -199,9 +179,7 @@ class People:
         self.marry_willingness = self.get_marry_willingness()
         
     def mutate(self):
-        # mutant = Allele(effect=-nrand.randint(1,41))
-        # mutant = nrand.choice(allele_list)
-
+        # Mutate one inherited allele by one adjacent allele state.
         if get_random() < 0.5:
             mut_idx = self.Paternal_allele.index + nrand.choice([-1, 1])
             mut_idx = max(0, min(35, mut_idx))
@@ -211,44 +189,17 @@ class People:
             mut_idx = self.Maternal_allele.index + nrand.choice([-1, 1])
             mut_idx = max(0, min(35, mut_idx))
             self.Maternal_allele = allele_list[mut_idx]
-
-        #if get_random() < 0.5:
-        #    if self.Paternal_allele.index == 0:
-        #        self.Paternal_allele = allele_list[1]
-        #    elif self.Paternal_allele.index == 35:
-        #        self.Paternal_allele = allele_list[34]
-        #    else:
-        #        if get_random() < 0.5:
-        #            mut_idx = self.Paternal_allele.index + 1
-        #        else:
-        #            mut_idx = self.Paternal_allele.index - 1
-        #        self.Paternal_allele = allele_list[mut_idx]
-
-        #else:
-        #    if self.Maternal_allele.index == 0:
-        #        self.Maternal_allele = allele_list[1]
-        #    elif self.Maternal_allele.index == 35:
-        #        self.Maternal_allele = allele_list[34]
-        #    else:
-        #        if get_random() < 0.5:
-        #            mut_idx = self.Maternal_allele.index + 1
-        #        else:
-        #            mut_idx = self.Maternal_allele.index - 1
-        #        self.Maternal_allele = allele_list[mut_idx]
             
         self.Menopause_age = 70 + np.mean([self.Paternal_allele.effect, self.Maternal_allele.effect])
         
     def update_N_young_sib_list(self):        
+        # Record the number of dependent maternal siblings at this age.
         N_young_sib = 0
         for sib in self.sibling_list:
             if (sib.Sex == 0) and (sib.Age < People.Female_age_cutoff):
                 N_young_sib += 1
             elif (sib.Sex == 1) and (sib.Age < People.Male_age_cutoff):
                 N_young_sib += 1
-                #if sib.Age == 0:
-                #    N_young_sib += 1
-        #if self.Age == 0:
-        #    N_young_sib += 1
                 
         self.N_young_sib_list.append(N_young_sib)
     
@@ -269,14 +220,9 @@ class People:
         else:
             w = 1.0 - 0.9 * (self.Age - 5) / 10.0
 
+        # Sibling pressure is strongest in early childhood and tapers after age 5.
         survival_rate_multiplier = 1 - (1 - survival_rate_multiplier) * w
-        
-        #survival_rate_multiplier = survival_N_sib(np.mean(self.N_young_sib_list))
-        
-        #survival_rate_multiplier = survival_N_sib(self.N_young_sib_list[0])
-        #for N_sib in self.N_young_sib_list[1:]:
-        #    survival_rate_multiplier = (survival_rate_multiplier + survival_N_sib(N_sib)) / 2
-        
+
         return survival_rate_multiplier
     
     def get_survival_rate(self):
@@ -311,21 +257,17 @@ class People:
         else:
             w = 1.0 - 0.9 * (self.Age - 5) / 10.0
 
+        # Maternal hazards are age-weighted to matter most for young children.
         hazard = 1 + w * (hazard - 1)
 
         _survival_rate = 1 - (1 - _survival_rate) * hazard
 
-        return max(0,min(1,_survival_rate)) # ensure return 0<=_survival_rate<=1
+        return max(0,min(1,_survival_rate))
     
     
     def get_sibling_effect_marriage(self):
         if len(self.N_young_sib_list) > 0:
             mating_willingness_multiplier = np.mean([marriage_N_sib(N_young_sib) for N_young_sib in self.N_young_sib_list])
-            #mating_willingness_multiplier = marriage_N_sib(np.mean(self.N_young_sib_list))
-            
-            #mating_willingness_multiplier = marriage_N_sib(self.N_young_sib_list[0])
-            #for N_sib in self.N_young_sib_list[1:]:
-            #    mating_willingness_multiplier = (mating_willingness_multiplier + marriage_N_sib(N_sib)) / 2
         else:
             mating_willingness_multiplier = 1
         
@@ -353,9 +295,6 @@ class People:
             
             elif self.N_daughters + self.N_sons > 0:
                 child_age_min = np.min([child.Age for child in self.offspring_list])
-                #if child_age_min < 3:
-                #    if not ((child_age_min == 2) and (get_random() < 0.5)):
-                #        _mating_willingness = 0
                 if child_age_min < interbirth_interval:
                     _mating_willingness = 0
                     
@@ -367,8 +306,8 @@ class People:
 
     
     def __del__(self):
-        #print('__del__')
         People.destructed_people += 1
+
 
 class Population:
     def __init__(self, if_marriage=False):
@@ -382,8 +321,7 @@ class Population:
         self.update()
         self.N_people_died = 0
         self.if_marriage = if_marriage
-        self.mutation_rate = 1/500  # 1/5000
-        #self.allele_dict = init_allele_dict()
+        self.mutation_rate = 1/500
         
     def Add_people(self, people):
         if people.Sex == 0:
@@ -391,21 +329,14 @@ class Population:
         else:
             self.Male_list.append(people)
     
-#     def get_N_sex_with_age(self):
-#         N_sex_with_age_dict = {'Male':[0]*self.max_age,'Female':[0]*self.max_age}
-#         for people in self.Male_list:
-#             N_sex_with_age_dict['Male'][people.Age] += 1
-#         for people in self.Female_list:
-#             N_sex_with_age_dict['Female'][people.Age] += 1
-#         return N_sex_with_age_dict
-
     def get_mean_Menopause_age(self):
         Menopause_age_list = []
         for people in self.Female_list:
             Menopause_age_list.append(people.Menopause_age)
         return np.mean(Menopause_age_list)
     
-    def marry(self): # Assuming polygyny
+    def marry(self):
+        # Males can retain multiple partners; females only enter if unpartnered.
         Males_to_marry = []
         Females_to_marry = []
         
@@ -447,8 +378,9 @@ class Population:
             offspring.mat_depletion_HR = np.exp(U_curve_right_quadratic_term*(Female.Age - U_curve_vertex_x)**2)
         else:
             offspring.mat_depletion_HR = 1
-            
-        for sibling in Female.offspring_list: # Only account for maternal siblings
+
+        # Sibling effects are based on maternal siblings.
+        for sibling in Female.offspring_list:
             if sex == 0:
                 sibling.N_Sister += 1
             else:
@@ -479,7 +411,7 @@ class Population:
             elif (people.Sex == 1) and (people.Age < People.Male_age_cutoff):
                 people.update_N_young_sib_list()
                 
-            if not self.if_marriage:     # random mating
+            if not self.if_marriage:
                 people.Partner = []
                 
             if get_random() < self.mutation_rate:
@@ -487,7 +419,7 @@ class Population:
             
             people.survival_rate = people.get_survival_rate()
         
-        # If there are too many individuals, keep ~2000 of them.
+        # Apply density control when the population grows too large.
         if self.N_male + self.N_female > 10000:
             self.pop_survival_rate = 5000/(self.N_male + self.N_female)
         else:
@@ -495,20 +427,14 @@ class Population:
         
         for sex,Pop_list in zip(['Male','Female'],[self.Male_list,self.Female_list]):
             for people in Pop_list:
-                    
-                
-#                 if (get_random() < people.survival_rate*self.pop_survival_rate) and \
-#                     (not ((self.pop_survival_rate < 1) and (people.Age < 20))):
                 if get_random() < people.survival_rate - (1 - self.pop_survival_rate) :
-                    # Survived
                     people.Age += 1
                     if sex == 'Male':
                         Male_list_new.append(people)
                     else:
                         Female_list_new.append(people)
                 else:
-                    # Died
-                    # remove the individual from Mother
+                    # Remove references to dead individuals from relatives and partners.
                     if people.Mother is not None:
                         if sex == 'Male':
                             people.Mother.N_sons -= 1
@@ -517,7 +443,6 @@ class Population:
                         people.Mother.offspring_list.remove(people)
                         assert people not in people.Mother.offspring_list
                         
-                    # remove the individual from Father
                     if people.Father is not None:
                         if sex == 'Male':
                             people.Father.N_sons -= 1
@@ -526,14 +451,12 @@ class Population:
                         people.Father.offspring_list.remove(people)
                         assert people not in people.Father.offspring_list
                         
-                    # remove the individual from offspring
                     for offspring in people.offspring_list:
                         if sex == 'Male':
                             offspring.Father = None
                         else:
                             offspring.Mother = None
                     
-                    # remove the individual from sibling
                     for sibling in people.sibling_list:
                         if sex == 'Male':
                             sibling.N_Brother -= 1
@@ -542,14 +465,11 @@ class Population:
                         sibling.sibling_list.remove(people)
                         assert people not in sibling.sibling_list
                     
-                    # remove the individual from partner
-                    
                     for partner in people.Partner:
                         partner.Partner.remove(people)
                         assert people not in partner.sibling_list
                     
                     self.N_people_died += 1
-                    #print('people died')
                         
         self.Male_list = Male_list_new
         self.Female_list = Female_list_new
@@ -581,11 +501,9 @@ class Population:
     def update(self):
         self.N_female = len(self.Female_list)
         self.N_male = len(self.Male_list)
-        # self.N_sex_with_age = self.get_N_sex_with_age()
-        # self.pop_survival_rate = max(0,1-(self.MORTALITY_COEFFICIENT)*(self.N_female+self.N_male)**2)
 
 
-# initialize population
+# Initialize both sexes across ages 0-9 with the default menopause allele.
 Allele.N = 0
 People.created_people = 0
 People.destructed_people = 0
@@ -628,15 +546,8 @@ for year in range(N_years + 1):
 
     Pop.reproduce()
     Pop.next_generation()
-    #N_list.append(Pop.N_male+Pop.N_female)
-    #allele_dict = Pop.get_allele_dict()
-    
-    # for key,value in allele_dict.items():
-    #     if key in allele_list_dict:
-    #         allele_list_dict[key].append(value)
-    #     else:
-    #         allele_list_dict[key] = [value]
 
+    # Record terminal allele frequencies and menopause ages for the summary.
     if year >= N_years - 100:
         N_pop = Pop.N_male + Pop.N_female
         allele_dict = Pop.get_allele_dict()
@@ -652,7 +563,6 @@ for year in range(N_years + 1):
         break
     if (Pop.N_male + Pop.N_female) > 200000:
         break
-    #assert Pop.N_people_died == People.destructed_people, "miss to deconstruct died people"
 
 
 
@@ -667,7 +577,6 @@ else:
     AF_max = 0
     i_max = None
     for i in range(0, len(allele_list)):
-        # AF = np.mean(allele_list_dict[i][-100:] / np.array(N_list[len(allele_list_dict[i])-100:len(allele_list_dict[i])]) / 2 )
         AF = np.mean(allele_list_dict[i][-100:])
         if AF > AF_max:
             AF_max = AF
@@ -680,4 +589,3 @@ else:
 
 with open(f'{out_folder}/MPSim_result_{Sibling_effect_mortality}{Maternal_effect_mortality}_{run_idx}.txt', 'w') as f:
     f.write(f'{Sibling_effect_mortality}\t{Maternal_effect_mortality}\t{k_s}\t{x0_s}\t{L_s}\t{max_age}\t' + result_str + '\n')
-
