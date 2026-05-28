@@ -76,7 +76,7 @@ def get_mortality_curve(max_age=70):
     y1 = A*np.exp(B*x1) + (0.001 - A*np.exp(B*11))
     
     x2 = x[11:]
-    y2 = 0.001*np.exp(0.07*(x2-11))
+    y2 = 0.001*np.exp(0.07*(59/(max_age-11))*(x2-11))
     
     y = np.array([0.15] + list(y1) + list(y2))
     
