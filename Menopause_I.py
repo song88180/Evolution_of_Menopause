@@ -12,7 +12,7 @@ MUTATION_RATE = 1 / 500
 START_MAX_AGE = 40
 END_MAX_AGE = 70
 N_YEARS = 100000
-TERMINAL_SUMMARY_YEARS = 100
+TERMINAL_SUMMARY_YEARS = 500
 DENSITY_CONTROL_THRESHOLD = 10000
 DENSITY_CONTROL_TARGET = 5000
 MAX_RETAINED_DEAD_REFERENCES = 20000
@@ -613,7 +613,105 @@ def record_population_summary(Pop, allele_list_dict, Menopause_age_list):
     Menopause_age_list.append(Pop.get_mean_Menopause_age())
 
 
+def format_summary_value(value):
+    if value is None:
+        return 'NA'
+    if isinstance(value, (float, np.floating)) and np.isnan(value):
+        return 'NA'
+    return str(value)
+
+
+def summarize_numeric_values(values):
+    finite_values = np.array(values, dtype=float)
+    finite_values = finite_values[np.isfinite(finite_values)]
+
+    if len(finite_values) == 0:
+        return {
+            'mean': None,
+            'sd': None,
+            'min': None,
+            'max': None,
+            'last': None,
+        }
+
+    return {
+        'mean': np.mean(finite_values),
+        'sd': np.std(finite_values),
+        'min': np.min(finite_values),
+        'max': np.max(finite_values),
+        'last': finite_values[-1],
+    }
+
+
+def relevant_value(value, is_relevant):
+    if is_relevant:
+        return value
+    return None
+
+
+def build_output_summary(
+    status,
+    final_year,
+    stop_reason,
+    Pop,
+    allele_list_dict,
+    Menopause_age_list,
+    dominant_allele_index,
+    dominant_allele_frequency,
+    menopause_age_report,
+):
+    label_dict = {i: -i for i in range(ALLELE_COUNT)}
+    terminal_menopause_ages = Menopause_age_list[-TERMINAL_SUMMARY_YEARS:]
+    menopause_stats = summarize_numeric_values(terminal_menopause_ages)
+
+    if dominant_allele_index is None:
+        dominant_allele_label = None
+    else:
+        dominant_allele_label = label_dict[dominant_allele_index]
+
+    attenuation_is_relevant = (
+        Sibling_effect_mortality
+        or Maternal_effect_mortality
+        or Maternal_age_effect
+    )
+
+    summary = {
+        'run_idx': run_idx,
+        'sib_mortality': Sibling_effect_mortality,
+        'maternal_age_effect': Maternal_age_effect,
+        'mat_mortality': Maternal_effect_mortality,
+        'attenuation_cutoff': relevant_value(attenuation_cutoff, attenuation_is_relevant),
+        'if_epi': if_epi,
+        'if_invasion': if_invasion,
+        'k_s': relevant_value(k_s, Sibling_effect_mortality),
+        'x0_s': relevant_value(x0_s, Sibling_effect_mortality),
+        'L_s': relevant_value(L_s, Sibling_effect_mortality),
+        'max_age': max_age,
+        'maternal_age_effect_quadratic_term': relevant_value(
+            U_curve_right_quadratic_term,
+            Maternal_age_effect,
+        ),
+        'maternal_age_effect_vertex_x': relevant_value(
+            U_curve_vertex_x,
+            Maternal_age_effect,
+        ),
+        'epi_h': relevant_value(epi_h, if_epi),
+        'status': status,
+        'stop_reason': stop_reason,
+        'final_year': final_year,
+        'menopause_age_report': menopause_age_report,
+        'menopause_age_mean': menopause_stats['mean'],
+        'dominant_allele': dominant_allele_label,
+        'dominant_allele_frequency': dominant_allele_frequency,
+    }
+
+    return summary
+
+
 def get_recent_menopause_trend(menopause_age_history, window_years):
+    if window_years < 2:
+        return None
+
     if len(menopause_age_history) < window_years:
         return None
 
@@ -665,8 +763,11 @@ def run_simulation():
     menopause_age_history = []
     early_stop_status = None
     menopause_age_report_override = None
+    stop_reason = 'completed'
+    final_year = 0
 
     for year in range(N_YEARS + 1):
+        final_year = year
         #print(f'{year}   ',end='\r')
 
         menopause_age_mean = Pop.get_mean_Menopause_age()
@@ -689,21 +790,30 @@ def run_simulation():
             print(menopause_age_mean)
             early_stop_status = get_early_stop_status(year, menopause_age_history)
             if early_stop_status is not None:
+                stop_reason = f'early_stop_{early_stop_status}'
                 if early_stop_status == 'failed':
                     menopause_age_report_override = f'>{MENOPAUSE_EVOLUTION_AGE_THRESHOLD}'
                 break
         
         if People.created_people - Pop.N_people_died - (Pop.N_male+Pop.N_female) > MAX_RETAINED_DEAD_REFERENCES:
+            stop_reason = 'retained_dead_reference_limit'
             break
         if (Pop.N_male + Pop.N_female) > MAX_POPULATION_SIZE:
+            stop_reason = 'max_population_size'
             break
 
-
-
-    label_dict = {i:-i for i in range(ALLELE_COUNT)}
-
     if Pop.N_male + Pop.N_female == 0:
-        result_str = 'extinct\tNA\tNA\tNA'
+        output_summary = build_output_summary(
+            status='extinct',
+            final_year=final_year,
+            stop_reason='population_extinct',
+            Pop=Pop,
+            allele_list_dict=allele_list_dict,
+            Menopause_age_list=Menopause_age_list,
+            dominant_allele_index=None,
+            dominant_allele_frequency=None,
+            menopause_age_report=None,
+        )
 
     else:
         if len(Menopause_age_list) == 0:
@@ -722,16 +832,29 @@ def run_simulation():
         Menopause_age_report = menopause_age_report_override or Menopause_age_mean
 
         if early_stop_status is not None:
-            result_str = f'{early_stop_status}\t{Menopause_age_report}\t{label_dict[i_max]}\t{AF_max}'
+            status = early_stop_status
         elif Menopause_age_mean < MENOPAUSE_EVOLUTION_AGE_THRESHOLD:
-            result_str = f'succeed\t{Menopause_age_mean}\t{label_dict[i_max]}\t{AF_max}'
+            status = 'succeed'
         else:
-            result_str = f'failed\t{Menopause_age_mean}\t{label_dict[i_max]}\t{AF_max}'
+            status = 'failed'
+
+        output_summary = build_output_summary(
+            status=status,
+            final_year=final_year,
+            stop_reason=stop_reason,
+            Pop=Pop,
+            allele_list_dict=allele_list_dict,
+            Menopause_age_list=Menopause_age_list,
+            dominant_allele_index=i_max,
+            dominant_allele_frequency=AF_max,
+            menopause_age_report=Menopause_age_report,
+        )
 
     os.makedirs(out_folder, exist_ok=True)
 
     with open(f'{out_folder}/MPSim_result_{Sibling_effect_mortality}{Maternal_effect_mortality}_{run_idx}.txt', 'w') as f:
-        f.write(f'{Sibling_effect_mortality}\t{Maternal_effect_mortality}\t{k_s}\t{x0_s}\t{L_s}\t{max_age}\t' + result_str + '\n')
+        f.write('\t'.join(output_summary.keys()) + '\n')
+        f.write('\t'.join(format_summary_value(value) for value in output_summary.values()) + '\n')
 
 
 def main():

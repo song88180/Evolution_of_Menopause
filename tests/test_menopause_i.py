@@ -122,6 +122,108 @@ def test_early_stop_waits_for_minimum_burn_in():
     assert sim.get_early_stop_status(5, history) is None
 
 
+def test_output_summary_uses_requested_order_and_na_for_irrelevant_parameters():
+    configure_test_simulation()
+    pop = sim.Population()
+    female = make_person(sex=0, age=30)
+    male = make_person(sex=1, age=30)
+    pop.Add_people(female)
+    pop.Add_people(male)
+    pop.update()
+
+    allele_list_dict = {i: [] for i in range(len(sim.allele_list))}
+    allele_list_dict[sim.default_allele.index] = [0.6, 0.7, 0.8]
+    menopause_age_list = [44.0, 45.0, 46.0]
+
+    summary = sim.build_output_summary(
+        status='succeed',
+        final_year=12,
+        stop_reason='completed',
+        Pop=pop,
+        allele_list_dict=allele_list_dict,
+        Menopause_age_list=menopause_age_list,
+        dominant_allele_index=sim.default_allele.index,
+        dominant_allele_frequency=0.7,
+        menopause_age_report=45.0,
+    )
+
+    assert list(summary.keys()) == [
+        'run_idx',
+        'sib_mortality',
+        'maternal_age_effect',
+        'mat_mortality',
+        'attenuation_cutoff',
+        'if_epi',
+        'if_invasion',
+        'k_s',
+        'x0_s',
+        'L_s',
+        'max_age',
+        'maternal_age_effect_quadratic_term',
+        'maternal_age_effect_vertex_x',
+        'epi_h',
+        'status',
+        'stop_reason',
+        'final_year',
+        'menopause_age_report',
+        'menopause_age_mean',
+        'dominant_allele',
+        'dominant_allele_frequency',
+    ]
+    assert summary['run_idx'] == sim.run_idx
+    assert summary['sib_mortality'] == 0
+    assert summary['maternal_age_effect'] == 0
+    assert summary['mat_mortality'] == 0
+    assert summary['attenuation_cutoff'] is None
+    assert summary['if_epi'] == 0
+    assert summary['if_invasion'] == 0
+    assert summary['k_s'] is None
+    assert summary['x0_s'] is None
+    assert summary['L_s'] is None
+    assert summary['menopause_age_mean'] == 45.0
+    assert summary['maternal_age_effect_quadratic_term'] is None
+    assert summary['maternal_age_effect_vertex_x'] is None
+    assert summary['epi_h'] is None
+    assert summary['dominant_allele'] == -sim.default_allele.index
+    assert summary['dominant_allele_frequency'] == 0.7
+
+
+def test_output_summary_keeps_relevant_parameters():
+    configure_test_simulation(if_invasion=1, max_age=55)
+    sim.Sibling_effect_mortality = 1
+    sim.Maternal_age_effect = 1
+    sim.Maternal_effect_mortality = 1
+    sim.if_epi = 1
+
+    pop = sim.Population()
+    pop.Add_people(make_person(sex=0, age=30))
+    pop.Add_people(make_person(sex=1, age=30))
+    pop.update()
+
+    allele_list_dict = {i: [] for i in range(len(sim.allele_list))}
+    allele_list_dict[sim.default_allele.index] = [0.7]
+
+    summary = sim.build_output_summary(
+        status='succeed',
+        final_year=12,
+        stop_reason='completed',
+        Pop=pop,
+        allele_list_dict=allele_list_dict,
+        Menopause_age_list=[45.0],
+        dominant_allele_index=sim.default_allele.index,
+        dominant_allele_frequency=0.7,
+        menopause_age_report=45.0,
+    )
+
+    assert summary['attenuation_cutoff'] == sim.attenuation_cutoff
+    assert summary['k_s'] == sim.k_s
+    assert summary['x0_s'] == sim.x0_s
+    assert summary['L_s'] == sim.L_s
+    assert summary['maternal_age_effect_quadratic_term'] == sim.U_curve_right_quadratic_term
+    assert summary['maternal_age_effect_vertex_x'] == sim.U_curve_vertex_x
+    assert summary['epi_h'] == sim.epi_h
+
+
 def test_population_step_cleans_dead_person_from_relatives_and_partner():
     configure_test_simulation(seed=2)
     pop = sim.Population(if_marriage=True)
