@@ -1,9 +1,22 @@
 import numpy as np
-import numpy.random as nrand
-import pandas as pd
 import yaml
-import scipy.stats
 import argparse
+import os
+
+
+ALLELE_COUNT = 36
+DEFAULT_ALLELE_INDEX = 30
+INITIAL_AGE_CLASSES = 10
+INITIAL_PEOPLE_PER_SEX_AGE = 200
+MUTATION_RATE = 1 / 500
+START_MAX_AGE = 40
+END_MAX_AGE = 70
+N_YEARS = 50000
+TERMINAL_SUMMARY_YEARS = 100
+DENSITY_CONTROL_THRESHOLD = 10000
+DENSITY_CONTROL_TARGET = 5000
+MAX_RETAINED_DEAD_REFERENCES = 20000
+MAX_POPULATION_SIZE = 200000
 
 
 def str2bool(v):
@@ -25,7 +38,7 @@ def attenuation_cutoff_type(v):
 parser = argparse.ArgumentParser(description="Read simulation parameters")
 parser.add_argument('--out-dir', type=str, required=True, help="Output directory")
 parser.add_argument('--sib-mortality', type=str2bool, required=True, help="Number of siblings influences the mortality")
-parser.add_argument('--mat-mortality', type=str2bool, required=False, help="Survival of the mother influences the mortality")
+parser.add_argument('--mat-mortality', type=str2bool, default=False, required=False, help="Survival of the mother influences the mortality")
 parser.add_argument('--lif-increase', type=str2bool, required=True, help="Gradually increase lifespan in evolution")
 parser.add_argument('--epi-inherit', type=str2bool, required=True, help="Inherit epigenetic effect")
 parser.add_argument('--maternal-age-effect', type=str2bool, required=True, help="Maternal age effect on mortality")
@@ -39,6 +52,7 @@ parser.add_argument('--U-curve-right-quadratic-term', type=float, default=0.004,
 parser.add_argument('--U-curve-vertex-x', type=float, default=32.7, help="Vertex x in U-curve")
 parser.add_argument('--attenuation_cutoff', '--attenuation-cutoff', type=attenuation_cutoff_type, default=0, help="Attenuation weight after age 15")
 parser.add_argument('--idx', type=int, required=True)
+parser.add_argument('--seed', type=int, default=None, help="Random seed for reproducible simulation runs")
 
 args = parser.parse_args()
 
@@ -58,6 +72,7 @@ U_curve_right_quadratic_term = args.U_curve_right_quadratic_term
 U_curve_vertex_x = args.U_curve_vertex_x
 attenuation_cutoff = args.attenuation_cutoff
 run_idx = args.idx
+rng = np.random.default_rng(args.seed)
 
 
 with open("options.yml",'r') as f:
@@ -111,20 +126,12 @@ def get_attenuation_weight(age, attenuation_cutoff):
 
 
 def marriage_N_sib(N_sib):
-    global k_m
-    global x0_m
-    global L_m
-    y = -L_m / (1 + np.exp(k_m * (x0_m - N_sib))) + 1
+    y = -L_s / (1 + np.exp(k_s * (x0_s - N_sib))) + 1
     return y
 
 
-# Pre-generate random values to reduce overhead in the long simulation loop.
-random_list=nrand.random(size=10000000).tolist()
 def get_random():
-    global random_list
-    if len(random_list) == 0:
-        random_list=nrand.random(size=10000000).tolist()
-    return random_list.pop()
+    return rng.random()
 
 
 class Allele:
@@ -139,15 +146,14 @@ Primary_mortality_with_age_female = dict(zip(x, y))
 Primary_mortality_with_age_male = Primary_mortality_with_age_female
 
 allele_list = []
-for i in range(36):
+for i in range(ALLELE_COUNT):
     # Higher allele indices lower menopause age by one year per effect unit.
     effect = -i
     allele_list.append(Allele(effect=effect))
 
-default_allele = allele_list[30]
+default_allele = allele_list[DEFAULT_ALLELE_INDEX]
 
 class People:
-    destructed_people = 0
     created_people = 0
     Male_age_cutoff = 15
     Female_age_cutoff = 15
@@ -193,13 +199,13 @@ class People:
     def mutate(self):
         # Mutate one inherited allele by a step of -2, -1, 1, or 2 allele states.
         if get_random() < 0.5:
-            mut_idx = self.Paternal_allele.index + nrand.choice([-2, -1, 1, 2])
-            mut_idx = max(0, min(35, mut_idx))
+            mut_idx = self.Paternal_allele.index + rng.choice([-2, -1, 1, 2])
+            mut_idx = max(0, min(ALLELE_COUNT - 1, mut_idx))
             self.Paternal_allele = allele_list[mut_idx]
 
         else:
-            mut_idx = self.Maternal_allele.index + nrand.choice([-2, -1, 1, 2])
-            mut_idx = max(0, min(35, mut_idx))
+            mut_idx = self.Maternal_allele.index + rng.choice([-2, -1, 1, 2])
+            mut_idx = max(0, min(ALLELE_COUNT - 1, mut_idx))
             self.Maternal_allele = allele_list[mut_idx]
             
         self.Menopause_age = 70 + np.mean([self.Paternal_allele.effect, self.Maternal_allele.effect])
@@ -302,10 +308,6 @@ class People:
         return max(0, min(1, _mating_willingness))
     
 
-    
-    def __del__(self):
-        People.destructed_people += 1
-
 
 class Population:
     def __init__(self, if_marriage=False):
@@ -319,7 +321,7 @@ class Population:
         self.update()
         self.N_people_died = 0
         self.if_marriage = if_marriage
-        self.mutation_rate = 1/500
+        self.mutation_rate = MUTATION_RATE
         
     def Add_people(self, people):
         if people.Sex == 0:
@@ -346,7 +348,7 @@ class Population:
             if (len(people.Partner) == 0) and (get_random() < people.marry_willingness):
                 Females_to_marry.append(people)
                 
-        nrand.shuffle(Males_to_marry)
+        rng.shuffle(Males_to_marry)
         for i in range(min(len(Males_to_marry),len(Females_to_marry))):
             Males_to_marry[i].Partner.append(Females_to_marry[i])
             Females_to_marry[i].Partner.append(Males_to_marry[i])
@@ -418,14 +420,14 @@ class Population:
             people.survival_rate = people.get_survival_rate()
         
         # Apply density control when the population grows too large.
-        if self.N_male + self.N_female > 10000:
-            self.pop_survival_rate = 5000/(self.N_male + self.N_female)
+        if self.N_male + self.N_female > DENSITY_CONTROL_THRESHOLD:
+            self.pop_survival_rate = DENSITY_CONTROL_TARGET/(self.N_male + self.N_female)
         else:
             self.pop_survival_rate = 1
         
         for sex,Pop_list in zip(['Male','Female'],[self.Male_list,self.Female_list]):
             for people in Pop_list:
-                if get_random() < people.survival_rate - (1 - self.pop_survival_rate) :
+                if get_random() < people.survival_rate * self.pop_survival_rate:
                     people.Age += 1
                     if sex == 'Male':
                         Male_list_new.append(people)
@@ -465,7 +467,7 @@ class Population:
                     
                     for partner in people.Partner:
                         partner.Partner.remove(people)
-                        assert people not in partner.sibling_list
+                        assert people not in partner.Partner
                     
                     self.N_people_died += 1
                         
@@ -504,13 +506,12 @@ class Population:
 # Initialize both sexes across ages 0-9 with the default menopause allele.
 Allele.N = 0
 People.created_people = 0
-People.destructed_people = 0
 
 
 Pop = Population()
 for sex in [0,1]:
-    for age in range(10):
-        for i in range(200):
+    for age in range(INITIAL_AGE_CLASSES):
+        for i in range(INITIAL_PEOPLE_PER_SEX_AGE):
             people = People(sex=sex,Paternal_allele=default_allele,Maternal_allele=default_allele,gen_of_birth=-age,age=age)
             Pop.Add_people(people)
 
@@ -525,11 +526,22 @@ sex_ratio_at_birth_list = []
 
 Menopause_age_list = []
 
-start_age = 40
-end_age = 70
-N_years = 50000
+def record_population_summary():
+    N_pop = Pop.N_male + Pop.N_female
+    if N_pop == 0:
+        return
 
-for year in range(N_years + 1):
+    allele_dict = Pop.get_allele_dict()
+    for key in allele_list_dict.keys():
+        if key in allele_dict:
+            allele_list_dict[key].append(allele_dict[key] / N_pop / 2)
+        else:
+            allele_list_dict[key].append(0)
+
+    Menopause_age_list.append(Pop.get_mean_Menopause_age())
+
+
+for year in range(N_YEARS + 1):
     print(f'{year}   ',end='\r')
 
     if year % 50 == 0:
@@ -537,7 +549,7 @@ for year in range(N_years + 1):
         print(menopause_age_mean)
 
     if if_lifespan:
-        max_age = np.round((year / N_years) * (end_age - start_age) + start_age).astype(int)
+        max_age = np.round((year / N_YEARS) * (END_MAX_AGE - START_MAX_AGE) + START_MAX_AGE).astype(int)
         _age_, _mortality_ = get_mortality_curve(max_age)
         Primary_mortality_with_age_female = dict(zip(_age_, _mortality_))
         Primary_mortality_with_age_male = Primary_mortality_with_age_female
@@ -546,30 +558,25 @@ for year in range(N_years + 1):
     Pop.next_generation()
 
     # Record terminal allele frequencies and menopause ages for the summary.
-    if year >= N_years - 100:
-        N_pop = Pop.N_male + Pop.N_female
-        allele_dict = Pop.get_allele_dict()
-        for key in allele_list_dict.keys():
-            if key in allele_dict:
-                allele_list_dict[key].append(allele_dict[key] / N_pop / 2)
-            else:
-                allele_list_dict[key].append(0)
-            
-        Menopause_age_list.append(Pop.get_mean_Menopause_age())
+    if year >= N_YEARS - TERMINAL_SUMMARY_YEARS:
+        record_population_summary()
     
-    if People.created_people - People.destructed_people - (Pop.N_male+Pop.N_female) > 20000:
+    if People.created_people - Pop.N_people_died - (Pop.N_male+Pop.N_female) > MAX_RETAINED_DEAD_REFERENCES:
         break
-    if (Pop.N_male + Pop.N_female) > 200000:
+    if (Pop.N_male + Pop.N_female) > MAX_POPULATION_SIZE:
         break
 
 
 
-label_dict = {i:-i for i in range(36)}
+label_dict = {i:-i for i in range(ALLELE_COUNT)}
 
 if Pop.N_male + Pop.N_female == 0:
     result_str = 'extinct\tNA\tNA\tNA'
 
 else:
+    if len(Menopause_age_list) == 0:
+        record_population_summary()
+
     Menopause_age_mean = np.mean(Menopause_age_list[-100:])
     
     AF_max = 0
@@ -584,6 +591,8 @@ else:
         result_str = f'succeed\t{Menopause_age_mean}\t{label_dict[i_max]}\t{AF_max}'
     else:
         result_str = f'failed\t{Menopause_age_mean}\t{label_dict[i_max]}\t{AF_max}'
+
+os.makedirs(out_folder, exist_ok=True)
 
 with open(f'{out_folder}/MPSim_result_{Sibling_effect_mortality}{Maternal_effect_mortality}_{run_idx}.txt', 'w') as f:
     f.write(f'{Sibling_effect_mortality}\t{Maternal_effect_mortality}\t{k_s}\t{x0_s}\t{L_s}\t{max_age}\t' + result_str + '\n')
