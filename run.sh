@@ -10,4 +10,5 @@ python Menopause_I.py \
 	--k-s 0.3 \
 	--x0-s 5 \
 	--L-s 2 \
+	--attenuation_cutoff 0 \
 	--idx $1

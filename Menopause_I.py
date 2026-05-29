@@ -16,6 +16,12 @@ def str2bool(v):
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
+def attenuation_cutoff_type(v):
+    v = float(v)
+    if 0 <= v <= 1:
+        return v
+    raise argparse.ArgumentTypeError('attenuation_cutoff must be between 0 and 1, inclusive.')
+
 parser = argparse.ArgumentParser(description="Read simulation parameters")
 parser.add_argument('--out-dir', type=str, required=True, help="Output directory")
 parser.add_argument('--sib-mortality', type=str2bool, required=True, help="Number of siblings influences the mortality")
@@ -33,6 +39,7 @@ parser.add_argument('--max-age', type=int, default=70, help="maximum lifespan")
 parser.add_argument('--U-curve-left-quadratic-term', type=float, default=0.004, help="Quadratic term in U-curve")
 parser.add_argument('--U-curve-right-quadratic-term', type=float, default=0.004, help="Quadratic term in U-curve")
 parser.add_argument('--U-curve-vertex-x', type=float, default=32.7, help="Vertex x in U-curve")
+parser.add_argument('--attenuation-cutoff', type=attenuation_cutoff_type, default=0, help="Attenuation weight after age 15")
 parser.add_argument('--idx', type=int, required=True)
 
 args = parser.parse_args()
@@ -53,6 +60,7 @@ max_age = args.max_age
 U_curve_left_quadratic_term = args.U_curve_left_quadratic_term
 U_curve_right_quadratic_term = args.U_curve_right_quadratic_term
 U_curve_vertex_x = args.U_curve_vertex_x
+attenuation_cutoff = args.attenuation_cutoff
 run_idx = args.idx
 
 
@@ -96,6 +104,14 @@ def survival_N_sib(N_sib):
     if y < 0:
         y = 0
     return y
+
+
+def get_attenuation_weight(age, attenuation_cutoff):
+    if age <= 5:
+        return 1.0
+    if age >= 15:
+        return attenuation_cutoff
+    return 1.0 - (1.0 - attenuation_cutoff) * (age - 5) / 10.0
 
 
 def marriage_N_sib(N_sib):
@@ -213,12 +229,7 @@ class People:
         if if_epi:
             survival_rate_multiplier = survival_rate_multiplier * self.epi_survival_rate
 
-        if self.Age <= 5:
-            w = 1.0
-        elif self.Age >= 15:
-            w = 0.1
-        else:
-            w = 1.0 - 0.9 * (self.Age - 5) / 10.0
+        w = get_attenuation_weight(self.Age, attenuation_cutoff)
 
         # Sibling pressure is strongest in early childhood and tapers after age 5.
         survival_rate_multiplier = 1 - (1 - survival_rate_multiplier) * w
@@ -250,12 +261,7 @@ class People:
         if Maternal_depletion_effect:
             hazard = hazard * self.mat_depletion_HR
 
-        if self.Age <= 5:
-            w = 1.0
-        elif self.Age >= 15:
-            w = 0.1
-        else:
-            w = 1.0 - 0.9 * (self.Age - 5) / 10.0
+        w = get_attenuation_weight(self.Age, attenuation_cutoff)
 
         # Maternal hazards are age-weighted to matter most for young children.
         hazard = 1 + w * (hazard - 1)

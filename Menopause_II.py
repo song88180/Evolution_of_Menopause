@@ -15,6 +15,12 @@ def str2bool(v):
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
+def attenuation_cutoff_type(v):
+    v = float(v)
+    if 0 <= v <= 1:
+        return v
+    raise argparse.ArgumentTypeError('attenuation_cutoff must be between 0 and 1, inclusive.')
+
 parser = argparse.ArgumentParser(description="Read simulation parameters")
 parser.add_argument('--out-dir', type=str, required=True, help="Output directory")
 parser.add_argument('--sib-mortality', type=str2bool, required=True, help="Number of siblings influences the mortality")
@@ -26,6 +32,7 @@ parser.add_argument('--x0-s', type=float, default=7, help="x0 in survival_N_sib 
 parser.add_argument('--L-s', type=float, default=0.5, help="L in survival_N_sib function")
 parser.add_argument('--epi-h', type=float, default=0.05, help="L in survival_N_sib function")
 parser.add_argument('--max-age', type=int, default=70, help="maximum age")
+parser.add_argument('--attenuation_cutoff', '--attenuation-cutoff', type=attenuation_cutoff_type, default=0, help="Minimum attenuation weight after age 15")
 parser.add_argument('--idx', type=int, required=True)
 
 args = parser.parse_args()
@@ -40,6 +47,7 @@ x0_s = args.x0_s
 L_s = args.L_s
 epi_h = args.epi_h
 max_age = args.max_age
+attenuation_cutoff = args.attenuation_cutoff
 run_idx = args.idx
 
 
@@ -78,6 +86,13 @@ def survival_N_sib(N_sib):
     if y < 0:
         y = 0
     return y
+
+def get_attenuation_weight(age):
+    if age <= 5:
+        return 1.0
+    if age >= 15:
+        return attenuation_cutoff
+    return 1.0 - (1.0 - attenuation_cutoff) * (age - 5) / 10.0
 
 random_list=nrand.random(size=10000000).tolist()
 def get_random():
@@ -170,6 +185,8 @@ class People:
     def get_sibling_effect_mortality(self):
         
         survival_rate_multiplier = np.mean([survival_N_sib(N_young_sib) for N_young_sib in self.N_young_sib_list])
+        w = get_attenuation_weight(self.Age)
+        survival_rate_multiplier = 1 - (1 - survival_rate_multiplier) * w
         
         
         #survival_rate_multiplier = survival_N_sib(np.mean(self.N_young_sib_list))
@@ -187,10 +204,12 @@ class People:
             primary_mortality = Primary_mortality_with_age_male[self.Age]
         
         _survival_rate = (1 - primary_mortality)
+
+        hazard = 1
         
         if Maternal_effect_mortality:
             if (self.Mother is None) and (self.Age <= 10):
-                _survival_rate = 1 - (1 - _survival_rate) * 10
+                hazard = hazard * 10
 
         if if_epi:
             _survival_rate = _survival_rate * self.epi_survival_rate
@@ -198,6 +217,10 @@ class People:
         if Sibling_effect_mortality:
             survival_rate_multiplier = self.get_sibling_effect_mortality()
             _survival_rate = _survival_rate * survival_rate_multiplier
+
+        w = get_attenuation_weight(self.Age)
+        hazard = 1 + w * (hazard - 1)
+        _survival_rate = 1 - (1 - _survival_rate) * hazard
         
         return max(0,min(1,_survival_rate)) # ensure return 0<=_survival_rate<=1
     
@@ -538,4 +561,3 @@ else:
 
 with open(f'{out_folder}/MPSim_result_{Sibling_effect_mortality}{Maternal_effect_mortality}_{run_idx}.txt', 'w') as f:
     f.write(f'{Sibling_effect_mortality}\t{Maternal_effect_mortality}\t{k_s}\t{x0_s}\t{L_s}\t{max_age}\t' + result_str + '\n')
-

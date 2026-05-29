@@ -6,13 +6,21 @@ import scipy.stats
 import pickle
 import argparse
 
+def attenuation_cutoff_type(v):
+    v = float(v)
+    if 0 <= v <= 1:
+        return v
+    raise argparse.ArgumentTypeError('attenuation_cutoff must be between 0 and 1, inclusive.')
+
 parser = argparse.ArgumentParser(description="Read simulation parameters")
 
 parser.add_argument('--meno-age', type=int, required=True)
+parser.add_argument('--attenuation_cutoff', '--attenuation-cutoff', type=attenuation_cutoff_type, default=0, help="Minimum attenuation weight after age 15")
 
 args = parser.parse_args()
 
 meno_age = args.meno_age
+attenuation_cutoff = args.attenuation_cutoff
 
 def get_mortality_curve(max_age=70):
 
@@ -58,6 +66,13 @@ def survival_N_sib(N_sib):
     else:
         y = -k_s*(N_sib - x0_s) / (1 - np.exp(-L_s * (N_sib - x0_s))) + 1 - k_s*x0_s/(1-np.exp(L_s*x0_s))
     return max(y, 0)
+
+def get_attenuation_weight(age):
+    if age <= 5:
+        return 1.0
+    if age >= 15:
+        return attenuation_cutoff
+    return 1.0 - (1.0 - attenuation_cutoff) * (age - 5) / 10.0
 
 random_list=nrand.random(size=10000000).tolist()
 def get_random():
@@ -141,6 +156,8 @@ class People:
     def get_sibling_effect_mortality(self):
         
         survival_rate_multiplier = np.mean([survival_N_sib(N_young_sib) for N_young_sib in self.N_young_sib_list])
+        w = get_attenuation_weight(self.Age)
+        survival_rate_multiplier = 1 - (1 - survival_rate_multiplier) * w
         
         return survival_rate_multiplier
     
@@ -151,17 +168,23 @@ class People:
             primary_mortality = Primary_mortality_with_age_male[self.Age]
         
         _survival_rate = (1 - primary_mortality)
+
+        hazard = 1
         
         if if_epi:
             _survival_rate = _survival_rate * self.epi_survival_rate
 
         if argv['Maternal_effect_mortality']:
             if (self.Mother is None) and (self.Age <= 10):
-                _survival_rate = 1 - 10 * (1-_survival_rate)
+                hazard = hazard * 10
         
         if argv['Sibling_effect_mortality']:
             survival_rate_multiplier = self.get_sibling_effect_mortality()
             _survival_rate = _survival_rate * survival_rate_multiplier
+
+        w = get_attenuation_weight(self.Age)
+        hazard = 1 + w * (hazard - 1)
+        _survival_rate = 1 - (1 - _survival_rate) * hazard
         
         return max(0,min(1,_survival_rate)) # ensure return 0<=_survival_rate<=1
     
