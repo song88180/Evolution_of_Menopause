@@ -5,22 +5,22 @@ import os
 
 
 ALLELE_COUNT = 36
-DEFAULT_ALLELE_INDEX = 30
+DEFAULT_ALLELE_INDEX = 25 #30
 INITIAL_AGE_CLASSES = 10
 INITIAL_PEOPLE_PER_SEX_AGE = 200
 MUTATION_RATE = 1 / 500
 START_MAX_AGE = 40
 END_MAX_AGE = 70
-N_YEARS = 50000
+N_YEARS = 100000
 TERMINAL_SUMMARY_YEARS = 100
 DENSITY_CONTROL_THRESHOLD = 10000
 DENSITY_CONTROL_TARGET = 5000
 MAX_RETAINED_DEAD_REFERENCES = 20000
 MAX_POPULATION_SIZE = 200000
 MENOPAUSE_EVOLUTION_AGE_THRESHOLD = 46
-EARLY_STOP_MIN_YEARS = 1000
+EARLY_STOP_MIN_YEARS = 2000
 EARLY_STOP_STABILITY_YEARS = 500
-EARLY_STOP_STABLE_SLOPE = 0.001
+EARLY_STOP_STABLE_SLOPE = 0.0001
 
 
 def str2bool(v):
@@ -53,7 +53,7 @@ parser.add_argument('--x0-s', type=float, default=7, help="x0 in survival_N_sib 
 parser.add_argument('--L-s', type=float, default=0.5, help="L in survival_N_sib function")
 parser.add_argument('--epi-h', type=float, default=0.1, help="heritability of the epigenetic effect")
 parser.add_argument('--max-age', type=int, default=70, help="maximum lifespan")
-parser.add_argument('--U-curve-right-quadratic-term', type=float, default=0.004, help="Quadratic term in U-curve")
+parser.add_argument('--U-curve-right-quadratic-term', type=float, default=0.008, help="Quadratic term in U-curve")
 parser.add_argument('--U-curve-vertex-x', type=float, default=32.7, help="Vertex x in U-curve")
 parser.add_argument('--attenuation_cutoff', '--attenuation-cutoff', type=attenuation_cutoff_type, default=0, help="Attenuation weight after age 15")
 parser.add_argument('--idx', type=int, required=True)
@@ -76,8 +76,8 @@ x0_s = 7
 L_s = 0.5
 epi_h = 0.1
 max_age = 70
-U_curve_right_quadratic_term = 0.004
-U_curve_vertex_x = 32.7
+U_curve_right_quadratic_term = 0.008
+U_curve_vertex_x = 30
 attenuation_cutoff = 0
 run_idx = None
 rng = np.random.default_rng()
@@ -638,7 +638,7 @@ def get_early_stop_status(year, menopause_age_history):
     trend = get_recent_menopause_trend(menopause_age_history, early_stop_stability_years)
     if trend is None:
         return None
-
+    print(trend['slope'])
     if (
         abs(trend['slope']) <= early_stop_stable_slope
         and trend['mean'] < MENOPAUSE_EVOLUTION_AGE_THRESHOLD
@@ -667,13 +667,10 @@ def run_simulation():
     menopause_age_report_override = None
 
     for year in range(N_YEARS + 1):
-        print(f'{year}   ',end='\r')
+        #print(f'{year}   ',end='\r')
 
         menopause_age_mean = Pop.get_mean_Menopause_age()
         menopause_age_history.append(menopause_age_mean)
-
-        if year % 50 == 0:
-            print(menopause_age_mean)
 
         if if_lifespan:
             max_age = np.round((year / N_YEARS) * (END_MAX_AGE - START_MAX_AGE) + START_MAX_AGE).astype(int)
@@ -689,6 +686,7 @@ def run_simulation():
             record_population_summary(Pop, allele_list_dict, Menopause_age_list)
 
         if year % 50 == 0:
+            print(menopause_age_mean)
             early_stop_status = get_early_stop_status(year, menopause_age_history)
             if early_stop_status is not None:
                 if early_stop_status == 'failed':

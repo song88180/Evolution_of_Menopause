@@ -1,13 +1,15 @@
 python Menopause_I.py \
 	--out-dir out \
-	--sib-mortality 0 \
-	--mat-mortality 0 \
+	--sib-mortality 1 \
+	--mat-mortality 1 \
+	--maternal-age-effect 1 \
 	--lif-increase 0 \
 	--epi-inherit 0 \
-	--maternal-age-effect 1 \
 	--interbirth-interval 3 \
 	--k-s 0.3 \
-	--x0-s 5 \
+	--x0-s 4 \
 	--L-s 2 \
-	--attenuation_cutoff 0 \
+	--U-curve-right-quadratic-term 0.008 \
+	--U-curve-vertex-x 30 \
+	--attenuation_cutoff 0.1 \
 	--idx $1
