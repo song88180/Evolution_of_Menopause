@@ -736,17 +736,22 @@ def get_early_stop_status(year, menopause_age_history):
     trend = get_recent_menopause_trend(menopause_age_history, early_stop_stability_years)
     if trend is None:
         return None
-    print(trend['slope'])
+
     if (
-        abs(trend['slope']) <= early_stop_stable_slope
-        and trend['mean'] < MENOPAUSE_EVOLUTION_AGE_THRESHOLD
+        trend['slope'] >= early_stop_stable_slope
+        and trend['min'] > MENOPAUSE_EVOLUTION_AGE_THRESHOLD
+    ):
+        return 'failed'
+
+    if (
+        trend['slope'] <= -early_stop_stable_slope
+        and trend['max'] < START_MAX_AGE - 1
     ):
         return 'succeed'
 
-    if (
-        trend['min'] > MENOPAUSE_EVOLUTION_AGE_THRESHOLD
-        and trend['slope'] >= -early_stop_stable_slope
-    ):
+    if abs(trend['slope']) <= early_stop_stable_slope:
+        if trend['mean'] <= MENOPAUSE_EVOLUTION_AGE_THRESHOLD:
+            return 'succeed'
         return 'failed'
 
     return None
