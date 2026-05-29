@@ -688,11 +688,12 @@ def run_simulation():
         if year >= max(0, early_stop_min_years - TERMINAL_SUMMARY_YEARS):
             record_population_summary(Pop, allele_list_dict, Menopause_age_list)
 
-        early_stop_status = get_early_stop_status(year, menopause_age_history)
-        if early_stop_status is not None:
-            if early_stop_status == 'failed':
-                menopause_age_report_override = f'>{MENOPAUSE_EVOLUTION_AGE_THRESHOLD}'
-            break
+        if year % 50 == 0:
+            early_stop_status = get_early_stop_status(year, menopause_age_history)
+            if early_stop_status is not None:
+                if early_stop_status == 'failed':
+                    menopause_age_report_override = f'>{MENOPAUSE_EVOLUTION_AGE_THRESHOLD}'
+                break
         
         if People.created_people - Pop.N_people_died - (Pop.N_male+Pop.N_female) > MAX_RETAINED_DEAD_REFERENCES:
             break
@@ -724,7 +725,7 @@ def run_simulation():
 
         if early_stop_status is not None:
             result_str = f'{early_stop_status}\t{Menopause_age_report}\t{label_dict[i_max]}\t{AF_max}'
-        elif i_max != 0:
+        elif Menopause_age_mean < MENOPAUSE_EVOLUTION_AGE_THRESHOLD:
             result_str = f'succeed\t{Menopause_age_mean}\t{label_dict[i_max]}\t{AF_max}'
         else:
             result_str = f'failed\t{Menopause_age_mean}\t{label_dict[i_max]}\t{AF_max}'
