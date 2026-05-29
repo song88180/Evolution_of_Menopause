@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import Menopause_I as sim
 
 
-def configure_test_simulation(seed=1):
+def configure_test_simulation(seed=1, if_invasion=0, max_age=70):
     args = SimpleNamespace(
         out_dir="/tmp/menopause-test",
         sib_mortality=0,
@@ -17,12 +17,13 @@ def configure_test_simulation(seed=1):
         lif_increase=0,
         epi_inherit=0,
         maternal_age_effect=0,
+        if_invasion=if_invasion,
         interbirth_interval=3,
         k_s=1.5,
         x0_s=7,
         L_s=0.5,
         epi_h=0.05,
-        max_age=70,
+        max_age=max_age,
         U_curve_right_quadratic_term=0.004,
         U_curve_vertex_x=32.7,
         attenuation_cutoff=0,
@@ -72,6 +73,20 @@ def test_get_attenuation_weight_tapers_between_ages_5_and_15():
     assert sim.get_attenuation_weight(10, cutoff) == 0.625
     assert sim.get_attenuation_weight(15, cutoff) == cutoff
     assert sim.get_attenuation_weight(30, cutoff) == cutoff
+
+
+def test_default_allele_matches_40_year_reproductive_lifespan_without_invasion():
+    configure_test_simulation(if_invasion=0, max_age=70)
+
+    assert sim.default_allele.index == 30
+    assert 70 + sim.default_allele.effect == 40
+
+
+def test_default_allele_matches_max_age_reproductive_lifespan_with_invasion():
+    configure_test_simulation(if_invasion=1, max_age=55)
+
+    assert sim.default_allele.index == 15
+    assert 70 + sim.default_allele.effect == 55
 
 
 def test_population_step_cleans_dead_person_from_relatives_and_partner():

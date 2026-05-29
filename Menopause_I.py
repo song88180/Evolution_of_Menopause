@@ -42,6 +42,7 @@ parser.add_argument('--mat-mortality', type=str2bool, default=False, required=Fa
 parser.add_argument('--lif-increase', type=str2bool, required=True, help="Gradually increase lifespan in evolution")
 parser.add_argument('--epi-inherit', type=str2bool, required=True, help="Inherit epigenetic effect")
 parser.add_argument('--maternal-age-effect', type=str2bool, required=True, help="Maternal age effect on mortality")
+parser.add_argument('--if-invasion', type=str2bool, default=False, help="Use max_age as the initial reproductive lifespan")
 parser.add_argument('--interbirth-interval', type=int, default=3, help="Interbirth interval")
 parser.add_argument('--k-s', type=float, default=1.5, help="k in survival_N_sib function")
 parser.add_argument('--x0-s', type=float, default=7, help="x0 in survival_N_sib function")
@@ -62,6 +63,7 @@ Maternal_age_effect = 0
 interbirth_interval = 3
 if_lifespan = 0
 if_epi = 0
+if_invasion = False
 k_s = 1.5
 x0_s = 7
 L_s = 0.5
@@ -134,6 +136,20 @@ def get_random():
     return rng.random()
 
 
+def get_default_allele_index(if_invasion, max_age):
+    if if_invasion:
+        default_index = int(70 - max_age)
+    else:
+        default_index = DEFAULT_ALLELE_INDEX
+
+    if not 0 <= default_index < ALLELE_COUNT:
+        raise ValueError(
+            f"Initial reproductive lifespan requires allele index {default_index}, "
+            f"but valid indices are 0 to {ALLELE_COUNT - 1}."
+        )
+    return default_index
+
+
 class Allele:
     N=0
     def __init__(self,effect=0):
@@ -154,6 +170,7 @@ def configure_simulation(args):
     global interbirth_interval
     global if_lifespan
     global if_epi
+    global if_invasion
     global k_s
     global x0_s
     global L_s
@@ -164,6 +181,7 @@ def configure_simulation(args):
     global attenuation_cutoff
     global run_idx
     global rng
+    global default_allele
     global Primary_mortality_with_age_female
     global Primary_mortality_with_age_male
 
@@ -174,6 +192,7 @@ def configure_simulation(args):
     interbirth_interval = args.interbirth_interval
     if_lifespan = args.lif_increase
     if_epi = args.epi_inherit
+    if_invasion = args.if_invasion
     k_s = args.k_s
     x0_s = args.x0_s
     L_s = args.L_s
@@ -188,6 +207,7 @@ def configure_simulation(args):
     x, y = get_mortality_curve(max_age=max_age)
     Primary_mortality_with_age_female = dict(zip(x, y))
     Primary_mortality_with_age_male = Primary_mortality_with_age_female
+    default_allele = allele_list[get_default_allele_index(if_invasion, max_age)]
 
 
 allele_list = []
