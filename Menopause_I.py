@@ -28,18 +28,16 @@ parser.add_argument('--sib-mortality', type=str2bool, required=True, help="Numbe
 parser.add_argument('--mat-mortality', type=str2bool, required=False, help="Survival of the mother influences the mortality")
 parser.add_argument('--lif-increase', type=str2bool, required=True, help="Gradually increase lifespan in evolution")
 parser.add_argument('--epi-inherit', type=str2bool, required=True, help="Inherit epigenetic effect")
-parser.add_argument('--maturity-effect', type=str2bool, required=True, help="Maturity effect on mortality")
-parser.add_argument('--maternal-depletion-effect', type=str2bool, required=True, help="Maternal depletion effect on mortality")
+parser.add_argument('--maternal-age-effect', type=str2bool, required=True, help="Maternal age effect on mortality")
 parser.add_argument('--interbirth-interval', type=int, default=3, help="Interbirth interval")
 parser.add_argument('--k-s', type=float, default=1.5, help="k in survival_N_sib function")
 parser.add_argument('--x0-s', type=float, default=7, help="x0 in survival_N_sib function")
 parser.add_argument('--L-s', type=float, default=0.5, help="L in survival_N_sib function")
 parser.add_argument('--epi-h', type=float, default=0.05, help="heritability of the epigenetic effect")
 parser.add_argument('--max-age', type=int, default=70, help="maximum lifespan")
-parser.add_argument('--U-curve-left-quadratic-term', type=float, default=0.004, help="Quadratic term in U-curve")
 parser.add_argument('--U-curve-right-quadratic-term', type=float, default=0.004, help="Quadratic term in U-curve")
 parser.add_argument('--U-curve-vertex-x', type=float, default=32.7, help="Vertex x in U-curve")
-parser.add_argument('--attenuation-cutoff', type=attenuation_cutoff_type, default=0, help="Attenuation weight after age 15")
+parser.add_argument('--attenuation_cutoff', '--attenuation-cutoff', type=attenuation_cutoff_type, default=0, help="Attenuation weight after age 15")
 parser.add_argument('--idx', type=int, required=True)
 
 args = parser.parse_args()
@@ -47,8 +45,7 @@ args = parser.parse_args()
 out_folder = args.out_dir
 Sibling_effect_mortality = args.sib_mortality
 Maternal_effect_mortality = args.mat_mortality
-Maturity_effect = args.maturity_effect
-Maternal_depletion_effect = args.maternal_depletion_effect
+Maternal_age_effect = args.maternal_age_effect
 interbirth_interval = args.interbirth_interval
 if_lifespan = args.lif_increase
 if_epi = args.epi_inherit
@@ -57,7 +54,6 @@ x0_s = args.x0_s
 L_s = args.L_s
 epi_h = args.epi_h
 max_age = args.max_age
-U_curve_left_quadratic_term = args.U_curve_left_quadratic_term
 U_curve_right_quadratic_term = args.U_curve_right_quadratic_term
 U_curve_vertex_x = args.U_curve_vertex_x
 attenuation_cutoff = args.attenuation_cutoff
@@ -176,7 +172,7 @@ class People:
         self.sibling_list = []
         self.N_young_sib_list = []
         self.survival_rate = 1
-        self.mat_depletion_HR = 1
+        self.maternal_age_HR = 1
         self.mating_willingness = self.get_mating_willingness()
         self.marry_willingness = self.get_marry_willingness()
         People.created_people += 1
@@ -254,12 +250,8 @@ class People:
             if (self.Mother is None) and (self.Age <= 10):
                 hazard = hazard * 10
 
-        if Maturity_effect:
-            if (self.Mother is not None) and (self.Mother.Age < U_curve_vertex_x):
-                hazard = hazard * np.exp(U_curve_left_quadratic_term*(self.Mother.Age - U_curve_vertex_x)**2)
-
-        if Maternal_depletion_effect:
-            hazard = hazard * self.mat_depletion_HR
+        if Maternal_age_effect:
+            hazard = hazard * self.maternal_age_HR
 
         w = get_attenuation_weight(self.Age, attenuation_cutoff)
 
@@ -381,9 +373,9 @@ class Population:
 
 
         if Female.Age > U_curve_vertex_x:
-            offspring.mat_depletion_HR = np.exp(U_curve_right_quadratic_term*(Female.Age - U_curve_vertex_x)**2)
+            offspring.maternal_age_HR = np.exp(U_curve_right_quadratic_term*(Female.Age - U_curve_vertex_x)**2)
         else:
-            offspring.mat_depletion_HR = 1
+            offspring.maternal_age_HR = 1
 
         # Sibling effects are based on maternal siblings.
         for sibling in Female.offspring_list:

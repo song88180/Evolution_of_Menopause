@@ -4,8 +4,7 @@ python Menopause_I.py \
 	--mat-mortality 0 \
 	--lif-increase 0 \
 	--epi-inherit 0 \
-	--maturity-effect 1 \
-	--maternal-depletion-effect 1 \
+	--maternal-age-effect 1 \
 	--interbirth-interval 3 \
 	--k-s 0.3 \
 	--x0-s 5 \
