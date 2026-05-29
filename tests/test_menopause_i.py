@@ -89,6 +89,39 @@ def test_default_allele_matches_max_age_reproductive_lifespan_with_invasion():
     assert 70 + sim.default_allele.effect == 55
 
 
+def test_early_stop_succeeds_when_mean_stabilizes_below_threshold():
+    configure_test_simulation()
+    sim.early_stop_min_years = 5
+    sim.early_stop_stability_years = 5
+    sim.early_stop_stable_slope = 0.001
+
+    history = [45.2, 45.2, 45.2, 45.2, 45.2, 45.2]
+
+    assert sim.get_early_stop_status(5, history) == 'succeed'
+
+
+def test_early_stop_fails_when_mean_is_stably_above_threshold():
+    configure_test_simulation()
+    sim.early_stop_min_years = 5
+    sim.early_stop_stability_years = 5
+    sim.early_stop_stable_slope = 0.001
+
+    history = [46.3, 46.4, 46.4, 46.5, 46.5, 46.6]
+
+    assert sim.get_early_stop_status(5, history) == 'failed'
+
+
+def test_early_stop_waits_for_minimum_burn_in():
+    configure_test_simulation()
+    sim.early_stop_min_years = 10
+    sim.early_stop_stability_years = 5
+    sim.early_stop_stable_slope = 0.001
+
+    history = [45.2, 45.2, 45.2, 45.2, 45.2, 45.2]
+
+    assert sim.get_early_stop_status(5, history) is None
+
+
 def test_population_step_cleans_dead_person_from_relatives_and_partner():
     configure_test_simulation(seed=2)
     pop = sim.Population(if_marriage=True)

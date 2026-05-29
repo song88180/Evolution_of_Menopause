@@ -17,6 +17,10 @@ DENSITY_CONTROL_THRESHOLD = 10000
 DENSITY_CONTROL_TARGET = 5000
 MAX_RETAINED_DEAD_REFERENCES = 20000
 MAX_POPULATION_SIZE = 200000
+MENOPAUSE_EVOLUTION_AGE_THRESHOLD = 46
+EARLY_STOP_MIN_YEARS = 1000
+EARLY_STOP_STABILITY_YEARS = 500
+EARLY_STOP_STABLE_SLOPE = 0.001
 
 
 def str2bool(v):
@@ -54,6 +58,9 @@ parser.add_argument('--U-curve-vertex-x', type=float, default=32.7, help="Vertex
 parser.add_argument('--attenuation_cutoff', '--attenuation-cutoff', type=attenuation_cutoff_type, default=0, help="Attenuation weight after age 15")
 parser.add_argument('--idx', type=int, required=True)
 parser.add_argument('--seed', type=int, default=None, help="Random seed for reproducible simulation runs")
+parser.add_argument('--early-stop-min-years', type=int, default=EARLY_STOP_MIN_YEARS, help="Minimum years before checking early-stop criteria")
+parser.add_argument('--early-stop-stability-years', type=int, default=EARLY_STOP_STABILITY_YEARS, help="Rolling years used to decide whether menopause age is stable")
+parser.add_argument('--early-stop-stable-slope', type=float, default=EARLY_STOP_STABLE_SLOPE, help="Maximum absolute yearly slope treated as stable")
 
 
 out_folder = None
@@ -74,6 +81,9 @@ U_curve_vertex_x = 32.7
 attenuation_cutoff = 0
 run_idx = None
 rng = np.random.default_rng()
+early_stop_min_years = EARLY_STOP_MIN_YEARS
+early_stop_stability_years = EARLY_STOP_STABILITY_YEARS
+early_stop_stable_slope = EARLY_STOP_STABLE_SLOPE
 
 
 options_path = os.path.join(os.path.dirname(__file__), "options.yml")
@@ -181,6 +191,9 @@ def configure_simulation(args):
     global attenuation_cutoff
     global run_idx
     global rng
+    global early_stop_min_years
+    global early_stop_stability_years
+    global early_stop_stable_slope
     global default_allele
     global Primary_mortality_with_age_female
     global Primary_mortality_with_age_male
@@ -203,6 +216,9 @@ def configure_simulation(args):
     attenuation_cutoff = args.attenuation_cutoff
     run_idx = args.idx
     rng = np.random.default_rng(args.seed)
+    early_stop_min_years = getattr(args, 'early_stop_min_years', EARLY_STOP_MIN_YEARS)
+    early_stop_stability_years = getattr(args, 'early_stop_stability_years', EARLY_STOP_STABILITY_YEARS)
+    early_stop_stable_slope = getattr(args, 'early_stop_stable_slope', EARLY_STOP_STABLE_SLOPE)
 
     x, y = get_mortality_curve(max_age=max_age)
     Primary_mortality_with_age_female = dict(zip(x, y))
@@ -597,6 +613,47 @@ def record_population_summary(Pop, allele_list_dict, Menopause_age_list):
     Menopause_age_list.append(Pop.get_mean_Menopause_age())
 
 
+def get_recent_menopause_trend(menopause_age_history, window_years):
+    if len(menopause_age_history) < window_years:
+        return None
+
+    recent_values = np.array(menopause_age_history[-window_years:])
+    if np.any(np.isnan(recent_values)):
+        return None
+
+    years = np.arange(window_years)
+    slope, _ = np.polyfit(years, recent_values, 1)
+    return {
+        'mean': np.mean(recent_values),
+        'min': np.min(recent_values),
+        'max': np.max(recent_values),
+        'slope': slope,
+    }
+
+
+def get_early_stop_status(year, menopause_age_history):
+    if year < early_stop_min_years:
+        return None
+
+    trend = get_recent_menopause_trend(menopause_age_history, early_stop_stability_years)
+    if trend is None:
+        return None
+
+    if (
+        abs(trend['slope']) <= early_stop_stable_slope
+        and trend['mean'] < MENOPAUSE_EVOLUTION_AGE_THRESHOLD
+    ):
+        return 'succeed'
+
+    if (
+        trend['min'] > MENOPAUSE_EVOLUTION_AGE_THRESHOLD
+        and trend['slope'] >= -early_stop_stable_slope
+    ):
+        return 'failed'
+
+    return None
+
+
 def run_simulation():
     global max_age
     global Primary_mortality_with_age_female
@@ -605,12 +662,17 @@ def run_simulation():
     Pop = initialize_population()
     allele_list_dict={i: [] for i in range(len(allele_list))}
     Menopause_age_list = []
+    menopause_age_history = []
+    early_stop_status = None
+    menopause_age_report_override = None
 
     for year in range(N_YEARS + 1):
         print(f'{year}   ',end='\r')
 
+        menopause_age_mean = Pop.get_mean_Menopause_age()
+        menopause_age_history.append(menopause_age_mean)
+
         if year % 50 == 0:
-            menopause_age_mean = Pop.get_mean_Menopause_age()
             print(menopause_age_mean)
 
         if if_lifespan:
@@ -622,9 +684,15 @@ def run_simulation():
         Pop.reproduce()
         Pop.next_generation()
 
-        # Record terminal allele frequencies and menopause ages for the summary.
-        if year >= N_YEARS - TERMINAL_SUMMARY_YEARS:
+        # Keep a rolling terminal summary once the burn-in period has passed.
+        if year >= max(0, early_stop_min_years - TERMINAL_SUMMARY_YEARS):
             record_population_summary(Pop, allele_list_dict, Menopause_age_list)
+
+        early_stop_status = get_early_stop_status(year, menopause_age_history)
+        if early_stop_status is not None:
+            if early_stop_status == 'failed':
+                menopause_age_report_override = f'>{MENOPAUSE_EVOLUTION_AGE_THRESHOLD}'
+            break
         
         if People.created_people - Pop.N_people_died - (Pop.N_male+Pop.N_female) > MAX_RETAINED_DEAD_REFERENCES:
             break
@@ -652,7 +720,11 @@ def run_simulation():
                 AF_max = AF
                 i_max = i
 
-        if i_max != 0:
+        Menopause_age_report = menopause_age_report_override or Menopause_age_mean
+
+        if early_stop_status is not None:
+            result_str = f'{early_stop_status}\t{Menopause_age_report}\t{label_dict[i_max]}\t{AF_max}'
+        elif i_max != 0:
             result_str = f'succeed\t{Menopause_age_mean}\t{label_dict[i_max]}\t{AF_max}'
         else:
             result_str = f'failed\t{Menopause_age_mean}\t{label_dict[i_max]}\t{AF_max}'
