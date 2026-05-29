@@ -51,7 +51,7 @@ parser.add_argument('--interbirth-interval', type=int, default=3, help="Interbir
 parser.add_argument('--k-s', type=float, default=1.5, help="k in survival_N_sib function")
 parser.add_argument('--x0-s', type=float, default=7, help="x0 in survival_N_sib function")
 parser.add_argument('--L-s', type=float, default=0.5, help="L in survival_N_sib function")
-parser.add_argument('--epi-h', type=float, default=0.05, help="heritability of the epigenetic effect")
+parser.add_argument('--epi-h', type=float, default=0.1, help="heritability of the epigenetic effect")
 parser.add_argument('--max-age', type=int, default=70, help="maximum lifespan")
 parser.add_argument('--U-curve-right-quadratic-term', type=float, default=0.004, help="Quadratic term in U-curve")
 parser.add_argument('--U-curve-vertex-x', type=float, default=32.7, help="Vertex x in U-curve")
@@ -74,7 +74,7 @@ if_invasion = False
 k_s = 1.5
 x0_s = 7
 L_s = 0.5
-epi_h = 0.05
+epi_h = 0.1
 max_age = 70
 U_curve_right_quadratic_term = 0.004
 U_curve_vertex_x = 32.7
@@ -267,7 +267,7 @@ class People:
 
         if if_epi:
             if self.Mother is not None:
-                survival_rate_sib_eff = np.mean([survival_N_sib(N_young_sib) for N_young_sib in self.Mother.N_young_sib_list])
+                survival_rate_sib_eff = self.Mother.epi_survival_rate * np.mean([survival_N_sib(N_young_sib) for N_young_sib in self.Mother.N_young_sib_list])
                 self.epi_survival_rate = 1 - (1 - survival_rate_sib_eff) * epi_h
             else:
                 self.epi_survival_rate = 1
