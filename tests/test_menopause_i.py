@@ -224,6 +224,22 @@ def test_output_summary_keeps_relevant_parameters():
     assert summary['epi_h'] == sim.epi_h
 
 
+def test_write_output_summary_includes_parameter_names_as_header(tmp_path):
+    output_path = tmp_path / "summary.txt"
+    summary = {
+        'sib_mortality': 1,
+        'mat_mortality': 0,
+        'k_s': 0.3,
+        'status': 'succeed',
+    }
+
+    sim.write_output_summary(output_path, summary)
+
+    lines = output_path.read_text().splitlines()
+    assert lines[0] == 'sib_mortality\tmat_mortality\tk_s\tstatus'
+    assert lines[1] == '1\t0\t0.3\tsucceed'
+
+
 def test_population_step_cleans_dead_person_from_relatives_and_partner():
     configure_test_simulation(seed=2)
     pop = sim.Population(if_marriage=True)

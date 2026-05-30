@@ -5,7 +5,7 @@ import os
 
 
 ALLELE_COUNT = 36
-DEFAULT_ALLELE_INDEX = 25 #30
+DEFAULT_ALLELE_INDEX = 30
 INITIAL_AGE_CLASSES = 10
 INITIAL_PEOPLE_PER_SEX_AGE = 200
 MUTATION_RATE = 1 / 500
@@ -708,6 +708,12 @@ def build_output_summary(
     return summary
 
 
+def write_output_summary(output_path, output_summary):
+    with open(output_path, 'w') as f:
+        f.write('\t'.join(output_summary.keys()) + '\n')
+        f.write('\t'.join(format_summary_value(value) for value in output_summary.values()) + '\n')
+
+
 def get_recent_menopause_trend(menopause_age_history, window_years):
     if window_years < 2:
         return None
@@ -857,9 +863,8 @@ def run_simulation():
 
     os.makedirs(out_folder, exist_ok=True)
 
-    with open(f'{out_folder}/MPSim_result_{Sibling_effect_mortality}{Maternal_effect_mortality}_{run_idx}.txt', 'w') as f:
-        f.write('\t'.join(output_summary.keys()) + '\n')
-        f.write('\t'.join(format_summary_value(value) for value in output_summary.values()) + '\n')
+    output_path = f'{out_folder}/MPSim_result_{Sibling_effect_mortality}{Maternal_effect_mortality}_{run_idx}.txt'
+    write_output_summary(output_path, output_summary)
 
 
 def main():
