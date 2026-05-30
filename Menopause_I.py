@@ -863,7 +863,7 @@ def run_simulation():
 
     os.makedirs(out_folder, exist_ok=True)
 
-    output_path = f'{out_folder}/MPSim_result_{Sibling_effect_mortality}{Maternal_effect_mortality}_{run_idx}.txt'
+    output_path = f'{out_folder}/MPSim_result_{run_idx}.txt'
     write_output_summary(output_path, output_summary)
 
 
