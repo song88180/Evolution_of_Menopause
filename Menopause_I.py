@@ -747,18 +747,18 @@ def get_early_stop_status(year, menopause_age_history):
         trend['slope'] >= early_stop_stable_slope
         and trend['min'] > MENOPAUSE_EVOLUTION_AGE_THRESHOLD
     ):
-        return 'failed'
+        return 'failed', f'>{MENOPAUSE_EVOLUTION_AGE_THRESHOLD}'
 
     if (
         trend['slope'] <= -early_stop_stable_slope
         and trend['max'] < START_MAX_AGE - 1
     ):
-        return 'succeed'
+        return 'succeed', f'<{START_MAX_AGE - 1}'
 
     if abs(trend['slope']) <= early_stop_stable_slope:
         if trend['mean'] <= MENOPAUSE_EVOLUTION_AGE_THRESHOLD:
-            return 'succeed'
-        return 'failed'
+            return 'succeed', None
+        return 'failed', None
 
     return None
 
@@ -799,11 +799,10 @@ def run_simulation():
 
         if year % 50 == 0:
             print(menopause_age_mean)
-            early_stop_status = get_early_stop_status(year, menopause_age_history)
-            if early_stop_status is not None:
+            early_stop_result = get_early_stop_status(year, menopause_age_history)
+            if early_stop_result is not None:
+                early_stop_status, menopause_age_report_override = early_stop_result
                 stop_reason = f'early_stop_{early_stop_status}'
-                if early_stop_status == 'failed':
-                    menopause_age_report_override = f'>{MENOPAUSE_EVOLUTION_AGE_THRESHOLD}'
                 break
         
         if People.created_people - Pop.N_people_died - (Pop.N_male+Pop.N_female) > MAX_RETAINED_DEAD_REFERENCES:

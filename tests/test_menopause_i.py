@@ -97,7 +97,7 @@ def test_early_stop_succeeds_when_mean_stabilizes_below_threshold():
 
     history = [45.2, 45.2, 45.2, 45.2, 45.2, 45.2]
 
-    assert sim.get_early_stop_status(5, history) == 'succeed'
+    assert sim.get_early_stop_status(5, history) == ('succeed', None)
 
 
 def test_early_stop_fails_when_mean_is_stably_above_threshold():
@@ -106,9 +106,31 @@ def test_early_stop_fails_when_mean_is_stably_above_threshold():
     sim.early_stop_stability_years = 5
     sim.early_stop_stable_slope = 0.001
 
+    history = [46.5, 46.5, 46.5, 46.5, 46.5, 46.5]
+
+    assert sim.get_early_stop_status(5, history) == ('failed', None)
+
+
+def test_early_stop_fails_when_trend_rises_above_threshold():
+    configure_test_simulation()
+    sim.early_stop_min_years = 5
+    sim.early_stop_stability_years = 5
+    sim.early_stop_stable_slope = 0.001
+
     history = [46.3, 46.4, 46.4, 46.5, 46.5, 46.6]
 
-    assert sim.get_early_stop_status(5, history) == 'failed'
+    assert sim.get_early_stop_status(5, history) == ('failed', '>46')
+
+
+def test_early_stop_succeeds_when_trend_declines_below_start_max_age():
+    configure_test_simulation()
+    sim.early_stop_min_years = 5
+    sim.early_stop_stability_years = 5
+    sim.early_stop_stable_slope = 0.001
+
+    history = [39.0, 38.5, 38.0, 37.5, 37.0, 36.5]
+
+    assert sim.get_early_stop_status(5, history) == ('succeed', '<39')
 
 
 def test_early_stop_waits_for_minimum_burn_in():
