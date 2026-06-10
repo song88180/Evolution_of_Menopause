@@ -104,8 +104,8 @@ def classify_outcomes(rows: pd.DataFrame) -> pd.Series:
     menopause_age = pd.to_numeric(rows["menopause_age_mean"], errors="coerce")
     not_extinct = rows["status"] != "extinct"
 
-    outcomes.loc[not_extinct & (menopause_age > 41)] = "succeed"
-    outcomes.loc[not_extinct & (menopause_age < 41)] = "extinct"
+    outcomes.loc[not_extinct & (menopause_age < 41)] = "succeed"
+    outcomes.loc[not_extinct & (menopause_age >= 41)] = "failed"
     return outcomes
 
 
