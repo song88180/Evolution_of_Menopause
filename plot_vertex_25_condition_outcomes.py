@@ -11,25 +11,25 @@ import numpy as np
 import pandas as pd
 
 
-ATTENUATED = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-SIB_COMP = [0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1]
-MAT_AGE = [0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1]
-MAT_MORTALITY = [0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1]
-EPIGENETIC = [0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1]
+ATTENUATED =    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+SIB_COMP =      [0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1]
+MAT_AGE =       [0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1]
+MAT_MORTALITY = [0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1]
+EPIGENETIC =    [0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1]
 
 CONDITION_NAMES = [
-    "Attenuated",
+    "Attenuated\nto 10%",
     "Sibling\ncompetition",
     "Maternal\nage",
     "Maternal\nmortality",
     "Epigenetic",
 ]
 
-STATUS_ORDER = ["extinct", "succeed", "failed"]
+STATUS_ORDER = ["succeed", "failed", "extinct"]
 STATUS_COLORS = {
-    "extinct": "#313695",
-    "succeed": "#006d3c",
-    "failed": "#c51b2d",
+    "extinct": "tab:gray",
+    "succeed": "tab:green",
+    "failed": "tab:red",
 }
 
 
@@ -67,6 +67,7 @@ def load_summary(path: Path) -> pd.DataFrame:
         "attenuation_cutoff",
         "if_epi",
         "status",
+        "menopause_age_mean",
     }
     missing = sorted(needed.difference(df.columns))
     if missing:
@@ -98,6 +99,16 @@ def rows_for_condition(
     return rows
 
 
+def classify_outcomes(rows: pd.DataFrame) -> pd.Series:
+    outcomes = pd.Series("failed", index=rows.index, dtype="object")
+    menopause_age = pd.to_numeric(rows["menopause_age_mean"], errors="coerce")
+    not_extinct = rows["status"] != "extinct"
+
+    outcomes.loc[not_extinct & (menopause_age > 41)] = "succeed"
+    outcomes.loc[not_extinct & (menopause_age < 41)] = "extinct"
+    return outcomes
+
+
 def build_plot_table(df: pd.DataFrame) -> pd.DataFrame:
     records = []
     for i, condition in enumerate(
@@ -107,7 +118,7 @@ def build_plot_table(df: pd.DataFrame) -> pd.DataFrame:
         if rows.empty:
             raise ValueError(f"No rows matched requested condition {i}: {condition}")
 
-        counts = rows["status"].value_counts()
+        counts = classify_outcomes(rows).value_counts()
         record = {
             "condition_id": i,
             "n": int(counts.sum()),
@@ -146,13 +157,14 @@ def add_condition_matrix(ax: plt.Axes, plot_df: pd.DataFrame) -> None:
             )
 
     for x, label in zip(x_positions, CONDITION_NAMES):
-        ax.text(
+            ax.text(
             x,
             y_positions[0] + 0.58,
             label,
             ha="left",
             va="bottom",
             rotation=45,
+            rotation_mode="anchor",
             fontsize=9,
         )
 
@@ -186,12 +198,23 @@ def add_outcome_bars(ax: plt.Axes, plot_df: pd.DataFrame) -> None:
         )
         left += values
 
-    ax.set_xlim(0, 1.0)
+    for y, n in zip(y_positions, plot_df["n"]):
+        ax.text(
+            1.015,
+            y,
+            f"n={n}",
+            ha="left",
+            va="center",
+            fontsize=9,
+            clip_on=False,
+        )
+
+    ax.set_xlim(0, 1.08)
     ax.set_ylim(-0.8, len(plot_df) - 0.2)
     ax.set_yticks([])
     ax.set_xlabel("Outcome proportion", fontsize=12)
     ax.set_xticks([0, 0.25, 0.5, 0.75, 1.0])
-    ax.set_xticklabels(["0", "25", "50", "75", "100"])
+    ax.set_xticklabels(["0", "0.25", "0.5", "0.75", "1"])
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.spines["left"].set_position(("data", 0))
