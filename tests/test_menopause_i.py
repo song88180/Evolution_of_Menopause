@@ -18,6 +18,7 @@ def configure_test_simulation(seed=1, if_invasion=0, max_age=70):
         epi_inherit=0,
         maternal_age_effect=0,
         if_invasion=if_invasion,
+        linear_effect=False,
         interbirth_interval=3,
         k_s=1.5,
         x0_s=7,
@@ -63,6 +64,14 @@ def test_survival_N_sib_is_bounded_and_decreases_with_more_siblings():
 
     assert all(0 <= value <= 1 for value in survival_values)
     assert survival_values == sorted(survival_values, reverse=True)
+
+
+def test_linear_sibling_effect_uses_only_k_s_and_is_bounded_at_zero():
+    configure_test_simulation()
+    sim.linear_effect = True
+    sim.k_s = 0.25
+
+    assert [sim.survival_N_sib(n) for n in range(6)] == [1.0, 0.75, 0.5, 0.25, 0, 0]
 
 
 def test_get_attenuation_weight_tapers_between_ages_5_and_15():
@@ -177,6 +186,7 @@ def test_output_summary_uses_requested_order_and_na_for_irrelevant_parameters():
         'attenuation_cutoff',
         'if_epi',
         'if_invasion',
+        'linear_effect',
         'k_s',
         'x0_s',
         'L_s',
@@ -199,6 +209,7 @@ def test_output_summary_uses_requested_order_and_na_for_irrelevant_parameters():
     assert summary['attenuation_cutoff'] is None
     assert summary['if_epi'] == 0
     assert summary['if_invasion'] == 0
+    assert summary['linear_effect'] is None
     assert summary['k_s'] is None
     assert summary['x0_s'] is None
     assert summary['L_s'] is None
@@ -244,6 +255,29 @@ def test_output_summary_keeps_relevant_parameters():
     assert summary['maternal_age_effect_quadratic_term'] == sim.U_curve_right_quadratic_term
     assert summary['maternal_age_effect_vertex_x'] == sim.U_curve_vertex_x
     assert summary['epi_h'] == sim.epi_h
+
+
+def test_output_summary_omits_saturating_parameters_for_linear_effect():
+    configure_test_simulation()
+    sim.Sibling_effect_mortality = 1
+    sim.linear_effect = True
+
+    summary = sim.build_output_summary(
+        status='succeed',
+        final_year=12,
+        stop_reason='completed',
+        Pop=sim.Population(),
+        allele_list_dict={i: [] for i in range(len(sim.allele_list))},
+        Menopause_age_list=[45.0],
+        dominant_allele_index=None,
+        dominant_allele_frequency=None,
+        menopause_age_report=45.0,
+    )
+
+    assert summary['linear_effect'] is True
+    assert summary['k_s'] == sim.k_s
+    assert summary['x0_s'] is None
+    assert summary['L_s'] is None
 
 
 def test_write_output_summary_includes_parameter_names_as_header(tmp_path):
