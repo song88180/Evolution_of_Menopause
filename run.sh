@@ -10,6 +10,6 @@ python Menopause_I.py \
 	--x0-s 4 \
 	--L-s 2 \
 	--U-curve-right-quadratic-term 0.008 \
-	--U-curve-vertex-x 30 \
+	--U-curve-vertex-x 28 \
 	--attenuation_cutoff 0.1 \
 	--idx $1
