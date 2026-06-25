@@ -12,15 +12,15 @@ MUTATION_RATE = 1 / 500
 START_MAX_AGE = 40
 END_MAX_AGE = 70
 N_YEARS = 100000
-TERMINAL_SUMMARY_YEARS = 500
+TERMINAL_SUMMARY_YEARS = 1000
 DENSITY_CONTROL_THRESHOLD = 10000
 DENSITY_CONTROL_TARGET = 5000
 MAX_RETAINED_DEAD_REFERENCES = 20000
 MAX_POPULATION_SIZE = 200000
 MENOPAUSE_EVOLUTION_AGE_THRESHOLD = 46
-EARLY_STOP_MIN_YEARS = 2000
-EARLY_STOP_STABILITY_YEARS = 500
-EARLY_STOP_STABLE_SLOPE = 0.0001
+EARLY_STOP_MIN_YEARS = 4000
+EARLY_STOP_STABILITY_YEARS = 3000
+EARLY_STOP_STABLE_SLOPE = 0.00002
 
 
 def str2bool(v):
@@ -759,9 +759,9 @@ def get_early_stop_status(year, menopause_age_history):
 
     if (
         trend['slope'] <= -early_stop_stable_slope
-        and trend['max'] < START_MAX_AGE - 1
+        and trend['max'] < START_MAX_AGE - 2
     ):
-        return 'succeed', f'<{START_MAX_AGE - 1}'
+        return 'succeed', f'<{START_MAX_AGE - 2}'
 
     if abs(trend['slope']) <= early_stop_stable_slope:
         if trend['mean'] <= MENOPAUSE_EVOLUTION_AGE_THRESHOLD:
