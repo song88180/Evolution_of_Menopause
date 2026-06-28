@@ -1,2 +1,9 @@
 __pycache__/
 *.py[cod]
+/plot_vertex_25_condition_outcomes.py
+.DS_Store
+failed_tasks_*
+out/
+out_*
+slurm_logs/
+*.sh

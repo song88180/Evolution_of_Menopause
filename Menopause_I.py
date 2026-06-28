@@ -12,15 +12,15 @@ MUTATION_RATE = 1 / 500
 START_MAX_AGE = 40
 END_MAX_AGE = 70
 N_YEARS = 100000
-TERMINAL_SUMMARY_YEARS = 500
+TERMINAL_SUMMARY_YEARS = 1000
 DENSITY_CONTROL_THRESHOLD = 10000
 DENSITY_CONTROL_TARGET = 5000
 MAX_RETAINED_DEAD_REFERENCES = 20000
 MAX_POPULATION_SIZE = 200000
 MENOPAUSE_EVOLUTION_AGE_THRESHOLD = 46
-EARLY_STOP_MIN_YEARS = 2000
-EARLY_STOP_STABILITY_YEARS = 500
-EARLY_STOP_STABLE_SLOPE = 0.0001
+EARLY_STOP_MIN_YEARS = 4000
+EARLY_STOP_STABILITY_YEARS = 3000
+EARLY_STOP_STABLE_SLOPE = 0.00002
 
 
 def str2bool(v):
@@ -48,6 +48,7 @@ parser.add_argument('--epi-inherit', type=str2bool, required=True, help="Inherit
 parser.add_argument('--maternal-age-effect', type=str2bool, required=True, help="Maternal age effect on mortality")
 parser.add_argument('--if-invasion', type=str2bool, default=False, help="Use max_age as the initial reproductive lifespan")
 parser.add_argument('--interbirth-interval', type=int, default=3, help="Interbirth interval")
+parser.add_argument('--linear-effect', action='store_true', help="Use a linear sibling competition effect controlled only by k_s")
 parser.add_argument('--k-s', type=float, default=1.5, help="k in survival_N_sib function")
 parser.add_argument('--x0-s', type=float, default=7, help="x0 in survival_N_sib function")
 parser.add_argument('--L-s', type=float, default=0.5, help="L in survival_N_sib function")
@@ -72,6 +73,7 @@ interbirth_interval = 3
 if_lifespan = 0
 if_epi = 0
 if_invasion = False
+linear_effect = False
 k_s = 1.5
 x0_s = 7
 L_s = 0.5
@@ -118,10 +120,13 @@ def get_mortality_curve(max_age=70):
 
 
 def survival_N_sib(N_sib):
-    # More young siblings reduce survival through a saturating response.
+    # More young siblings reduce survival through either a linear or saturating response.
+    global linear_effect
     global k_s
     global x0_s
     global L_s
+    if linear_effect:
+        return max(0, 1 - k_s * N_sib)
     if N_sib == x0_s:
         y = -k_s / L_s + 1 - k_s*x0_s/(1-np.exp(L_s*x0_s))
     else:
@@ -183,6 +188,7 @@ def configure_simulation(args):
     global if_lifespan
     global if_epi
     global if_invasion
+    global linear_effect
     global k_s
     global x0_s
     global L_s
@@ -209,6 +215,7 @@ def configure_simulation(args):
     if_lifespan = args.lif_increase
     if_epi = args.epi_inherit
     if_invasion = args.if_invasion
+    linear_effect = getattr(args, 'linear_effect', False)
     k_s = args.k_s
     x0_s = args.x0_s
     L_s = args.L_s
@@ -696,9 +703,10 @@ def build_output_summary(
         'attenuation_cutoff': relevant_value(attenuation_cutoff, attenuation_is_relevant),
         'if_epi': if_epi,
         'if_invasion': if_invasion,
+        'linear_effect': relevant_value(linear_effect, Sibling_effect_mortality),
         'k_s': relevant_value(k_s, Sibling_effect_mortality),
-        'x0_s': relevant_value(x0_s, Sibling_effect_mortality),
-        'L_s': relevant_value(L_s, Sibling_effect_mortality),
+        'x0_s': relevant_value(x0_s, Sibling_effect_mortality and not linear_effect),
+        'L_s': relevant_value(L_s, Sibling_effect_mortality and not linear_effect),
         'younger_sib_only': relevant_value(younger_sib_only, Sibling_effect_mortality),
         'max_age': max_age,
         'maternal_age_effect_quadratic_term': relevant_value(
@@ -765,9 +773,9 @@ def get_early_stop_status(year, menopause_age_history):
 
     if (
         trend['slope'] <= -early_stop_stable_slope
-        and trend['max'] < START_MAX_AGE - 1
+        and trend['max'] < START_MAX_AGE - 2
     ):
-        return 'succeed', f'<{START_MAX_AGE - 1}'
+        return 'succeed', f'<{START_MAX_AGE - 2}'
 
     if abs(trend['slope']) <= early_stop_stable_slope:
         if trend['mean'] <= MENOPAUSE_EVOLUTION_AGE_THRESHOLD:
