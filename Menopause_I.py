@@ -748,6 +748,7 @@ def build_output_summary(
         'final_year': final_year,
         'menopause_age_report': menopause_age_report,
         'menopause_age_mean': menopause_stats['mean'],
+        'menopause_age_std': menopause_stats['sd'],
         'dominant_allele': dominant_allele_label,
         'dominant_allele_frequency': dominant_allele_frequency,
     }

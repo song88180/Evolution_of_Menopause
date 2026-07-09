@@ -257,6 +257,7 @@ def test_output_summary_uses_requested_order_and_na_for_irrelevant_parameters():
         'final_year',
         'menopause_age_report',
         'menopause_age_mean',
+        'menopause_age_std',
         'dominant_allele',
         'dominant_allele_frequency',
     ]
@@ -274,6 +275,7 @@ def test_output_summary_uses_requested_order_and_na_for_irrelevant_parameters():
     assert summary['younger_sib_only'] is None
     assert summary['older_sib_only'] is None
     assert summary['menopause_age_mean'] == 45.0
+    assert summary['menopause_age_std'] == np.std(menopause_age_list)
     assert summary['maternal_age_effect_quadratic_term'] is None
     assert summary['maternal_age_effect_vertex_x'] is None
     assert summary['epi_h'] is None
