@@ -18,6 +18,7 @@ DENSITY_CONTROL_TARGET = 5000
 MAX_RETAINED_DEAD_REFERENCES = 20000
 MAX_POPULATION_SIZE = 200000
 MENOPAUSE_EVOLUTION_AGE_THRESHOLD = 46
+EARLY_STOP_LOWER_CUTOFF = START_MAX_AGE - 2
 EARLY_STOP_MIN_YEARS = 4000
 EARLY_STOP_STABILITY_YEARS = 3000
 EARLY_STOP_STABLE_SLOPE = 0.00002
@@ -38,6 +39,19 @@ def attenuation_cutoff_type(v):
     if 0 <= v <= 1:
         return v
     raise argparse.ArgumentTypeError('attenuation_cutoff must be between 0 and 1, inclusive.')
+
+def early_stop_cutoffs_type(v):
+    try:
+        lower_text, upper_text = v.split(',', 1)
+        lower = float(lower_text)
+        upper = float(upper_text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError('early_stop_cutoffs must be formatted as lower,upper.') from exc
+
+    if lower >= upper:
+        raise argparse.ArgumentTypeError('early_stop_cutoffs lower must be less than upper.')
+
+    return lower, upper
 
 parser = argparse.ArgumentParser(description="Read simulation parameters")
 parser.add_argument('--out-dir', type=str, required=True, help="Output directory")
@@ -65,6 +79,7 @@ parser.add_argument('--seed', type=int, default=None, help="Random seed for repr
 parser.add_argument('--early-stop-min-years', type=int, default=EARLY_STOP_MIN_YEARS, help="Minimum years before checking early-stop criteria")
 parser.add_argument('--early-stop-stability-years', type=int, default=EARLY_STOP_STABILITY_YEARS, help="Rolling years used to decide whether menopause age is stable")
 parser.add_argument('--early-stop-stable-slope', type=float, default=EARLY_STOP_STABLE_SLOPE, help="Maximum absolute yearly slope treated as stable")
+parser.add_argument('--early-stop-cutoffs', type=early_stop_cutoffs_type, default=(EARLY_STOP_LOWER_CUTOFF, MENOPAUSE_EVOLUTION_AGE_THRESHOLD), metavar='lower,upper', help="Lower and upper mean menopause age cutoffs for early stopping")
 
 
 out_folder = None
@@ -88,6 +103,7 @@ U_curve_vertex_x = 30
 attenuation_cutoff = 0
 run_idx = None
 rng = np.random.default_rng()
+early_stop_lower_cutoff = EARLY_STOP_LOWER_CUTOFF
 early_stop_min_years = EARLY_STOP_MIN_YEARS
 early_stop_stability_years = EARLY_STOP_STABILITY_YEARS
 early_stop_stable_slope = EARLY_STOP_STABLE_SLOPE
@@ -212,6 +228,8 @@ def configure_simulation(args):
     global attenuation_cutoff
     global run_idx
     global rng
+    global MENOPAUSE_EVOLUTION_AGE_THRESHOLD
+    global early_stop_lower_cutoff
     global early_stop_min_years
     global early_stop_stability_years
     global early_stop_stable_slope
@@ -244,6 +262,8 @@ def configure_simulation(args):
     attenuation_cutoff = args.attenuation_cutoff
     run_idx = args.idx
     rng = np.random.default_rng(args.seed)
+    early_stop_cutoffs = getattr(args, 'early_stop_cutoffs', (EARLY_STOP_LOWER_CUTOFF, 46))
+    early_stop_lower_cutoff, MENOPAUSE_EVOLUTION_AGE_THRESHOLD = early_stop_cutoffs
     early_stop_min_years = getattr(args, 'early_stop_min_years', EARLY_STOP_MIN_YEARS)
     early_stop_stability_years = getattr(args, 'early_stop_stability_years', EARLY_STOP_STABILITY_YEARS)
     early_stop_stable_slope = getattr(args, 'early_stop_stable_slope', EARLY_STOP_STABLE_SLOPE)
@@ -795,13 +815,13 @@ def get_early_stop_status(year, menopause_age_history):
         trend['slope'] >= early_stop_stable_slope
         and trend['min'] > MENOPAUSE_EVOLUTION_AGE_THRESHOLD
     ):
-        return 'failed', f'>{MENOPAUSE_EVOLUTION_AGE_THRESHOLD}'
+        return 'failed', f'>{MENOPAUSE_EVOLUTION_AGE_THRESHOLD:g}'
 
     if (
         trend['slope'] <= -early_stop_stable_slope
-        and trend['max'] < START_MAX_AGE - 2
+        and trend['max'] < early_stop_lower_cutoff
     ):
-        return 'succeed', f'<{START_MAX_AGE - 2}'
+        return 'succeed', f'<{early_stop_lower_cutoff:g}'
 
     if abs(trend['slope']) <= early_stop_stable_slope:
         if trend['mean'] <= MENOPAUSE_EVOLUTION_AGE_THRESHOLD:

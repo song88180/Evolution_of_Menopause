@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import Menopause_I as sim
 
 
-def configure_test_simulation(seed=1, if_invasion=0, max_age=70):
+def configure_test_simulation(seed=1, if_invasion=0, max_age=70, early_stop_cutoffs=None):
     args = SimpleNamespace(
         out_dir="/tmp/menopause-test",
         sib_mortality=0,
@@ -33,6 +33,8 @@ def configure_test_simulation(seed=1, if_invasion=0, max_age=70):
         idx=1,
         seed=seed,
     )
+    if early_stop_cutoffs is not None:
+        args.early_stop_cutoffs = early_stop_cutoffs
     sim.configure_simulation(args)
     sim.People.created_people = 0
 
@@ -193,9 +195,24 @@ def test_early_stop_succeeds_when_trend_declines_below_start_max_age():
     sim.early_stop_stability_years = 5
     sim.early_stop_stable_slope = 0.001
 
-    history = [39.0, 38.5, 38.0, 37.5, 37.0, 36.5]
+    history = [37.5, 37.4, 37.3, 37.2, 37.1, 37.0]
 
-    assert sim.get_early_stop_status(5, history) == ('succeed', '<39')
+    assert sim.get_early_stop_status(5, history) == ('succeed', '<38')
+
+
+def test_early_stop_cutoffs_configure_lower_and_upper_thresholds():
+    configure_test_simulation(early_stop_cutoffs=(40, 50))
+    sim.early_stop_min_years = 5
+    sim.early_stop_stability_years = 5
+    sim.early_stop_stable_slope = 0.001
+
+    rising_history = [50.3, 50.4, 50.4, 50.5, 50.5, 50.6]
+    declining_history = [39.5, 39.4, 39.3, 39.2, 39.1, 39.0]
+
+    assert sim.MENOPAUSE_EVOLUTION_AGE_THRESHOLD == 50
+    assert sim.early_stop_lower_cutoff == 40
+    assert sim.get_early_stop_status(5, rising_history) == ('failed', '>50')
+    assert sim.get_early_stop_status(5, declining_history) == ('succeed', '<40')
 
 
 def test_early_stop_waits_for_minimum_burn_in():
