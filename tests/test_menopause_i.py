@@ -23,6 +23,8 @@ def configure_test_simulation(seed=1, if_invasion=0, max_age=70):
         k_s=1.5,
         x0_s=7,
         L_s=0.5,
+        younger_sib_only=False,
+        older_sib_only=False,
         epi_h=0.05,
         max_age=max_age,
         U_curve_right_quadratic_term=0.004,
@@ -72,6 +74,60 @@ def test_linear_sibling_effect_uses_only_k_s_and_is_bounded_at_zero():
     sim.k_s = 0.25
 
     assert [sim.survival_N_sib(n) for n in range(6)] == [1.0, 0.75, 0.5, 0.25, 0, 0]
+
+
+def test_sibling_count_history_can_select_older_siblings_only():
+    configure_test_simulation()
+    focal = make_person(sex=0, age=5)
+    younger = make_person(sex=1, age=2)
+    older = make_person(sex=0, age=8)
+    adult_sibling = make_person(sex=0, age=50)
+    same_age = make_person(sex=1, age=5)
+    focal.sibling_list.extend([younger, older, adult_sibling, same_age])
+
+    focal.update_N_young_sib_list()
+
+    assert focal.N_young_sib_list == [3]
+    assert focal.N_younger_sib_list == [1]
+    assert focal.N_older_sib_list == [1]
+
+    sim.younger_sib_only = False
+    sim.older_sib_only = True
+
+    assert sim.get_sibling_count_history(focal) == [1]
+
+
+def test_configure_simulation_rejects_conflicting_sibling_age_filters():
+    args = SimpleNamespace(
+        out_dir="/tmp/menopause-test",
+        sib_mortality=1,
+        mat_mortality=0,
+        lif_increase=0,
+        epi_inherit=0,
+        maternal_age_effect=0,
+        if_invasion=0,
+        linear_effect=False,
+        interbirth_interval=3,
+        k_s=1.5,
+        x0_s=7,
+        L_s=0.5,
+        younger_sib_only=True,
+        older_sib_only=True,
+        epi_h=0.05,
+        max_age=70,
+        U_curve_right_quadratic_term=0.004,
+        U_curve_vertex_x=32.7,
+        attenuation_cutoff=0,
+        idx=1,
+        seed=1,
+    )
+
+    try:
+        sim.configure_simulation(args)
+    except ValueError as exc:
+        assert "Only one of" in str(exc)
+    else:
+        raise AssertionError("configure_simulation accepted conflicting sibling age filters")
 
 
 def test_get_attenuation_weight_tapers_between_ages_5_and_15():
@@ -190,6 +246,8 @@ def test_output_summary_uses_requested_order_and_na_for_irrelevant_parameters():
         'k_s',
         'x0_s',
         'L_s',
+        'younger_sib_only',
+        'older_sib_only',
         'max_age',
         'maternal_age_effect_quadratic_term',
         'maternal_age_effect_vertex_x',
@@ -213,6 +271,8 @@ def test_output_summary_uses_requested_order_and_na_for_irrelevant_parameters():
     assert summary['k_s'] is None
     assert summary['x0_s'] is None
     assert summary['L_s'] is None
+    assert summary['younger_sib_only'] is None
+    assert summary['older_sib_only'] is None
     assert summary['menopause_age_mean'] == 45.0
     assert summary['maternal_age_effect_quadratic_term'] is None
     assert summary['maternal_age_effect_vertex_x'] is None
@@ -252,6 +312,8 @@ def test_output_summary_keeps_relevant_parameters():
     assert summary['k_s'] == sim.k_s
     assert summary['x0_s'] == sim.x0_s
     assert summary['L_s'] == sim.L_s
+    assert summary['younger_sib_only'] is False
+    assert summary['older_sib_only'] is False
     assert summary['maternal_age_effect_quadratic_term'] == sim.U_curve_right_quadratic_term
     assert summary['maternal_age_effect_vertex_x'] == sim.U_curve_vertex_x
     assert summary['epi_h'] == sim.epi_h

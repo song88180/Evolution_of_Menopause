@@ -52,7 +52,9 @@ parser.add_argument('--linear-effect', action='store_true', help="Use a linear s
 parser.add_argument('--k-s', type=float, default=1.5, help="k in survival_N_sib function")
 parser.add_argument('--x0-s', type=float, default=7, help="x0 in survival_N_sib function")
 parser.add_argument('--L-s', type=float, default=0.5, help="L in survival_N_sib function")
-parser.add_argument('--younger-sib-only', action='store_true', help="Only count siblings younger than the focal child in sibling competition")
+sib_age_group = parser.add_mutually_exclusive_group()
+sib_age_group.add_argument('--younger-sib-only', action='store_true', help="Only count siblings younger than the focal child in sibling competition")
+sib_age_group.add_argument('--older-sib-only', action='store_true', help="Only count siblings older than the focal child in sibling competition")
 parser.add_argument('--epi-h', type=float, default=0.1, help="heritability of the epigenetic effect")
 parser.add_argument('--max-age', type=int, default=70, help="maximum lifespan")
 parser.add_argument('--U-curve-right-quadratic-term', type=float, default=0.008, help="Quadratic term in U-curve")
@@ -78,6 +80,7 @@ k_s = 1.5
 x0_s = 7
 L_s = 0.5
 younger_sib_only = False
+older_sib_only = False
 epi_h = 0.1
 max_age = 70
 U_curve_right_quadratic_term = 0.008
@@ -149,6 +152,14 @@ def marriage_N_sib(N_sib):
     return y
 
 
+def get_sibling_count_history(person):
+    if younger_sib_only:
+        return person.N_younger_sib_list
+    if older_sib_only:
+        return person.N_older_sib_list
+    return person.N_young_sib_list
+
+
 def get_random():
     return rng.random()
 
@@ -193,6 +204,7 @@ def configure_simulation(args):
     global x0_s
     global L_s
     global younger_sib_only
+    global older_sib_only
     global epi_h
     global max_age
     global U_curve_right_quadratic_term
@@ -219,7 +231,12 @@ def configure_simulation(args):
     k_s = args.k_s
     x0_s = args.x0_s
     L_s = args.L_s
-    younger_sib_only = args.younger_sib_only
+    selected_younger_sib_only = getattr(args, 'younger_sib_only', False)
+    selected_older_sib_only = getattr(args, 'older_sib_only', False)
+    if selected_younger_sib_only and selected_older_sib_only:
+        raise ValueError('Only one of younger_sib_only and older_sib_only can be enabled.')
+    younger_sib_only = selected_younger_sib_only
+    older_sib_only = selected_older_sib_only
     epi_h = args.epi_h
     max_age = args.max_age
     U_curve_right_quadratic_term = args.U_curve_right_quadratic_term
@@ -270,6 +287,7 @@ class People:
         self.sibling_list = []
         self.N_young_sib_list = []
         self.N_younger_sib_list = []
+        self.N_older_sib_list = []
         self.survival_rate = 1
         self.maternal_age_HR = 1
         self.mating_willingness = self.get_mating_willingness()
@@ -279,7 +297,7 @@ class People:
 
         if if_epi:
             if self.Mother is not None:
-                mother_sib_counts = self.Mother.N_younger_sib_list if younger_sib_only else self.Mother.N_young_sib_list
+                mother_sib_counts = get_sibling_count_history(self.Mother)
                 survival_rate_sib_eff = self.Mother.epi_survival_rate * np.mean([survival_N_sib(N_sib) for N_sib in mother_sib_counts])
                 self.epi_survival_rate = 1 - (1 - survival_rate_sib_eff) * epi_h
             else:
@@ -308,22 +326,28 @@ class People:
         # Record dependent maternal sibling counts at this age.
         N_young_sib = 0
         N_younger_sib = 0
+        N_older_sib = 0
         for sib in self.sibling_list:
             if (sib.Sex == 0) and (sib.Age < People.Female_age_cutoff):
                 N_young_sib += 1
                 if sib.Age < self.Age:
                     N_younger_sib += 1
+                elif sib.Age > self.Age:
+                    N_older_sib += 1
             elif (sib.Sex == 1) and (sib.Age < People.Male_age_cutoff):
                 N_young_sib += 1
                 if sib.Age < self.Age:
                     N_younger_sib += 1
+                elif sib.Age > self.Age:
+                    N_older_sib += 1
                 
         self.N_young_sib_list.append(N_young_sib)
         self.N_younger_sib_list.append(N_younger_sib)
+        self.N_older_sib_list.append(N_older_sib)
     
     def get_sibling_effect_mortality(self):
 
-        sib_counts = self.N_younger_sib_list if younger_sib_only else self.N_young_sib_list
+        sib_counts = get_sibling_count_history(self)
         if len(sib_counts) > 0:
             survival_rate_multiplier = np.mean([survival_N_sib(N_sib) for N_sib in sib_counts])
         else:
@@ -708,6 +732,7 @@ def build_output_summary(
         'x0_s': relevant_value(x0_s, Sibling_effect_mortality and not linear_effect),
         'L_s': relevant_value(L_s, Sibling_effect_mortality and not linear_effect),
         'younger_sib_only': relevant_value(younger_sib_only, Sibling_effect_mortality),
+        'older_sib_only': relevant_value(older_sib_only, Sibling_effect_mortality),
         'max_age': max_age,
         'maternal_age_effect_quadratic_term': relevant_value(
             U_curve_right_quadratic_term,
