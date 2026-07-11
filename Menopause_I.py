@@ -727,6 +727,9 @@ def build_output_summary(
     label_dict = {i: -i for i in range(ALLELE_COUNT)}
     terminal_menopause_ages = Menopause_age_list[-TERMINAL_SUMMARY_YEARS:]
     menopause_stats = summarize_numeric_values(terminal_menopause_ages)
+    final_generation_menopause_stats = summarize_numeric_values(
+        [female.Menopause_age for female in Pop.Female_list]
+    )
 
     if dominant_allele_index is None:
         dominant_allele_label = None
@@ -768,7 +771,7 @@ def build_output_summary(
         'final_year': final_year,
         'menopause_age_report': menopause_age_report,
         'menopause_age_mean': menopause_stats['mean'],
-        'menopause_age_std': menopause_stats['sd'],
+        'menopause_age_std': final_generation_menopause_stats['sd'],
         'dominant_allele': dominant_allele_label,
         'dominant_allele_frequency': dominant_allele_frequency,
     }
